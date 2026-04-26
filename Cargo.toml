@@ -1,0 +1,23 @@
+[package]
+name = "tiny-httpd"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytes = "1.8.0"
+futures-util = "0.3.31"
+http-body-util = "0.1.2"
+hyper = { version = "1.6.0", features = ["http1", "server"] }
+hyper-util = { version = "0.1.10", features = ["server", "server-auto", "server-graceful", "http1", "tokio", "service"] }
+mime_guess = "2.0.5"
+opentelemetry = "0.31.0"
+telemetry-setup = { git = "https://github.com/mattwend/telemetry-setup", tag = "v0.1.0", features = ["otlp", "tokio-metrics"] }
+thiserror = "2.0.12"
+tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "signal", "net", "fs", "io-util", "time"] }
+tokio-util = { version = "0.7.15", features = ["io"] }
+tracing = "0.1.41"
+
+[dev-dependencies]
+hyper-util = { version = "0.1.10", features = ["client", "client-legacy", "http1", "tokio"] }
+tempfile = "3.14.0"
+tracing-subscriber = { version = "0.3.23", features = ["fmt", "registry"] }
