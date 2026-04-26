@@ -1,0 +1,102 @@
+use std::{error::Error, fmt::Display};
+
+use bytes::Bytes;
+use futures_util::{StreamExt, TryStreamExt};
+use http_body_util::{BodyExt, Empty, Full, StreamBody, combinators::BoxBody};
+use hyper::{
+    Response, StatusCode,
+    body::Frame,
+    header::{CONTENT_LENGTH, CONTENT_TYPE},
+};
+use tokio::fs::File;
+use tokio_util::io::ReaderStream;
+use tracing::error;
+
+use crate::fs::{ResolveError, resolve_file};
+
+/// Boxed response body type used by all HTTP responses.
+pub(crate) type ResponseBody = BoxBody<Bytes, Box<dyn Error + Send + Sync>>;
+
+pub(crate) async fn file_response(
+    content_root: &std::path::Path,
+    path: &str,
+    head_only: bool,
+) -> Result<Response<ResponseBody>, ResolveError> {
+    let resolved = resolve_file(content_root, path).await?;
+    let content_type = mime_guess::from_path(&resolved.canonical_path)
+        .first_or_octet_stream()
+        .essence_str()
+        .to_string();
+
+    let body = if head_only {
+        empty_response_body()
+    } else {
+        stream_body(resolved.file)
+    };
+
+    Ok(response_builder(StatusCode::OK)
+        .header(CONTENT_TYPE, content_type)
+        .header(CONTENT_LENGTH, resolved.content_length)
+        .body(body)
+        .unwrap_or_else(|error| internal_error_response("failed to build file response", error)))
+}
+
+pub(crate) fn text_response(status: StatusCode, body: &'static str) -> Response<ResponseBody> {
+    text_response_with_headers(status, body, &[])
+}
+
+pub(crate) fn text_response_with_headers(
+    status: StatusCode,
+    body: &'static str,
+    headers: &[(&'static str, &'static str)],
+) -> Response<ResponseBody> {
+    let mut builder = response_builder(status)
+        .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+        .header(CONTENT_LENGTH, body.len());
+
+    for (name, value) in headers {
+        builder = builder.header(*name, *value);
+    }
+
+    builder
+        .body(full_body(body))
+        .unwrap_or_else(|error| internal_error_response("failed to build text response", error))
+}
+
+pub(crate) fn response_builder(status: StatusCode) -> hyper::http::response::Builder {
+    Response::builder().status(status)
+}
+
+fn full_body<T>(body: T) -> ResponseBody
+where
+    T: Into<Bytes>,
+{
+    Full::new(body.into())
+        .map_err(|never| match never {})
+        .boxed()
+}
+
+pub(crate) fn empty_response_body() -> ResponseBody {
+    Empty::<Bytes>::new()
+        .map_err(|never| match never {})
+        .boxed()
+}
+
+fn stream_body(file: File) -> ResponseBody {
+    let stream = ReaderStream::new(file)
+        .map_ok(Frame::data)
+        .map(|result| result.map_err(|error| -> Box<dyn Error + Send + Sync> { Box::new(error) }));
+    BodyExt::boxed(StreamBody::new(stream))
+}
+
+fn internal_error_response<T>(context: &'static str, error: T) -> Response<ResponseBody>
+where
+    T: Display,
+{
+    error!(error = %error, context, "failed to construct HTTP response");
+    Response::builder()
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+        .body(full_body("internal server error\n"))
+        .unwrap_or_else(|_| Response::new(full_body("internal server error\n")))
+}
