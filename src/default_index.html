@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>tiny-httpd</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #1a1a1a;
+        --fg-muted: #6b7280;
+        --bg: #fafafa;
+        --surface: #ffffff;
+        --border: #e5e7eb;
+        --accent: #2563eb;
+        --accent-hover: #1d4ed8;
+        --code-bg: #f3f4f6;
+        --mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e5e7eb;
+          --fg-muted: #9ca3af;
+          --bg: #0a0a0a;
+          --surface: #111113;
+          --border: #27272a;
+          --accent: #60a5fa;
+          --accent-hover: #93bbfd;
+          --code-bg: #1c1c1f;
+        }
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 2rem;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      main {
+        max-width: 38rem;
+        width: 100%;
+      }
+
+      h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        margin-bottom: 0.5rem;
+      }
+
+      .subtitle {
+        color: var(--fg-muted);
+        font-size: 0.9375rem;
+        margin-bottom: 2rem;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .card h2 {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--fg-muted);
+        margin-bottom: 1rem;
+      }
+
+      .step {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+      }
+
+      .step + .step {
+        margin-top: 0.875rem;
+      }
+
+      .step-num {
+        flex-shrink: 0;
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 50%;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        display: grid;
+        place-items: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--fg-muted);
+      }
+
+      .step p {
+        font-size: 0.875rem;
+        color: var(--fg);
+      }
+
+      code {
+        font-family: var(--mono);
+        font-size: 0.8125em;
+        background: var(--code-bg);
+        padding: 0.125em 0.375em;
+        border-radius: 0.25rem;
+      }
+
+      .link-row {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+        font-size: 0.875rem;
+      }
+
+      .link-row a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.15s;
+      }
+
+      .link-row a:hover {
+        color: var(--accent-hover);
+      }
+
+      .link-row span {
+        color: var(--border);
+      }
+
+      footer {
+        margin-top: 2.5rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.75rem;
+        color: var(--fg-muted);
+      }
+
+
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>tiny-httpd</h1>
+      <p class="subtitle">Minimal static file server. No content root configured yet.</p>
+
+      <div class="card">
+        <h2>Get started</h2>
+        <div class="step">
+          <div class="step-num">1</div>
+          <p>Point <code>--content-root</code> at a directory containing your static files.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <p>Place an <code>index.html</code> in that directory. This page disappears automatically.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <p>For containers, use an init-container or volume mount to inject content at <code>/app/public</code>.</p>
+        </div>
+      </div>
+
+      <div class="link-row">
+        <a href="https://github.com/mattwend/tiny-httpd">Documentation</a>
+        <span>·</span>
+        <a href="https://github.com/mattwend/tiny-httpd/issues">Issues</a>
+      </div>
+
+      <footer>
+        <span>Serving from memory — no content root mounted</span>
+      </footer>
+    </main>
+  </body>
+</html>

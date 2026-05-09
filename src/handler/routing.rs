@@ -14,6 +14,7 @@ use tracing::{Instrument, debug, debug_span, info_span, warn};
 use crate::{
     fs::ResolveError,
     handler::{
+        default_page::default_index_response,
         response::{
             ResponseBody, empty_response_body, file_response, text_response,
             text_response_with_headers,
@@ -106,12 +107,15 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> Response<Re
     }
 
     if path == "/readyz" {
-        let readable = match fs::metadata(&state.content_root).await {
-            Ok(metadata) => metadata.is_dir(),
-            Err(error) => {
-                warn!(error = %error, path = %state.content_root.display(), "failed to inspect content root for readiness probe");
-                false
-            }
+        let readable = match &state.content_root {
+            None => true,
+            Some(content_root) => match fs::metadata(content_root).await {
+                Ok(metadata) => metadata.is_dir(),
+                Err(error) => {
+                    warn!(error = %error, path = %content_root.display(), "failed to inspect content root for readiness probe");
+                    false
+                }
+            },
         };
         if state.ready.load(Ordering::SeqCst) && readable {
             debug!("readiness probe passed");
@@ -141,9 +145,24 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> Response<Re
         return text_response(StatusCode::SERVICE_UNAVAILABLE, "not ready\n");
     }
 
-    match file_response(&state.content_root, path, method == Method::HEAD).await {
+    let Some(content_root) = &state.content_root else {
+        return fallback_default_response(path, method == Method::HEAD);
+    };
+
+    match file_response(content_root, path, method == Method::HEAD).await {
         Ok(response) => response,
+        Err(ResolveError::NotFound) if path == "/" => {
+            default_index_response(method == Method::HEAD)
+        }
         Err(error) => map_file_error(error),
+    }
+}
+
+fn fallback_default_response(path: &str, head_only: bool) -> Response<ResponseBody> {
+    if path == "/" {
+        default_index_response(head_only)
+    } else {
+        text_response(StatusCode::NOT_FOUND, "not found\n")
     }
 }
 

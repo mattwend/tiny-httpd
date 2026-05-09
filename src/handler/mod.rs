@@ -1,3 +1,4 @@
+mod default_page;
 mod response;
 mod routing;
 mod state;

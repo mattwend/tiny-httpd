@@ -5,6 +5,7 @@ Minimal Rust HTTP server for static files in Kubernetes.
 ## What it does
 
 - Serves static files from `/app/public` by default
+- Serves an embedded default welcome page at `/` when no `index.html` is available
 - Supports `GET` and `HEAD`
 - Resolves `index.html` for `/`, `/dir`, and `/dir/`
 - Blocks path traversal and symlink escapes outside the content root
@@ -23,11 +24,20 @@ No TLS, auth, uploads, directory listings, reverse proxying, compression, range 
 ## Prerequisites
 
 - Rust + Cargo
-- Podman for container builds
+- Podman for local container builds
+- Docker Buildx for GitHub Actions container validation and publishing
 
 The reference container build targets `x86_64-unknown-linux-musl` and produces a static binary for a `scratch` image.
 
 ## Run locally
+
+```bash
+cargo run -- --listen-addr 127.0.0.1:8080
+```
+
+With no `/app/public` on disk, `/` serves an embedded welcome page and other paths return `404`.
+
+To serve your own files:
 
 ```bash
 mkdir -p public
@@ -45,7 +55,7 @@ Environment variables can be overridden by CLI flags.
 | `content_root` | `TINY_HTTPD_CONTENT_ROOT` | `--content-root` | `/app/public` |
 | `service_name` | `TINY_HTTPD_SERVICE_NAME` | `--service-name` | `tiny-httpd` |
 
-Startup fails if the content root is missing or not a directory, the socket cannot be bound, or telemetry setup fails.
+Startup warns if the content root is missing or unavailable and still starts. If the content root exists but is not a directory, startup fails. Binding failures and telemetry setup failures still fail startup.
 
 ## Request behavior
 
@@ -71,13 +81,15 @@ Successful file responses include `Content-Type` (derived from the file extensio
 | Unsupported method | `405 Method Not Allowed` |
 | I/O error while serving an existing file | `500 Internal Server Error` |
 
+If the content root is missing entirely, `/` still returns the embedded welcome page and `/readyz` returns `200 OK`.
+
 Error bodies are plain text and intentionally minimal.
 
 ### Path resolution
 
 | Path | Lookup |
 | --- | --- |
-| `/` | `index.html` |
+| `/` | `index.html`, otherwise embedded default welcome page |
 | `/foo` | `foo`, then `foo/index.html` if `foo` is a directory |
 | `/foo/` | `foo/index.html` |
 | `/foo.html` | `foo.html` |
@@ -116,14 +128,13 @@ Build from the repository root:
 podman build -f Containerfile -t tiny-httpd:dev .
 ```
 
-The final image contains:
+The final image contains only:
 
 ```text
 /app/tiny-httpd
-/app/public/...
 ```
 
-The `public/` directory must exist at the repository root before building; the `COPY` step fails otherwise. Add site files there, or use the init-container pattern below.
+The base image ships binary only. Add site files downstream with a derived image, volume mount, or init-container copy pattern.
 
 ### Init-container deployment
 

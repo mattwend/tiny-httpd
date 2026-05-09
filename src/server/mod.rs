@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, path::PathBuf};
+use std::{
+    io::ErrorKind,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -17,19 +21,20 @@ const DRAIN_TIMEOUT_SECS: u64 = 10;
 pub struct Startup {
     /// Bound TCP listener ready to accept connections.
     pub listener: TcpListener,
-    /// Canonical content-root path validated during startup.
-    pub(crate) content_root: PathBuf,
+    /// Canonical content-root path validated during startup when available.
+    pub(crate) content_root: Option<PathBuf>,
+}
+
+impl Startup {
+    /// Returns canonical content-root path when startup validated one.
+    pub fn content_root(&self) -> Option<&Path> {
+        self.content_root.as_deref()
+    }
 }
 
 /// Errors returned during startup validation or server execution.
 #[derive(Debug, Error)]
 pub enum ServerError {
-    #[error("content root `{path}` does not exist or cannot be inspected: {source}")]
-    ContentRootMetadata {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
     #[error("content root `{0}` is not a directory")]
     ContentRootNotDirectory(PathBuf),
     #[error("failed to canonicalize content root `{path}`: {source}")]
@@ -54,31 +59,46 @@ pub enum ServerError {
 /// * `config` - Runtime configuration.
 ///
 /// # Returns
-/// A [`Startup`] value containing the bound listener and canonical content root.
+/// A [`Startup`] value containing the bound listener and canonical content root
+/// when one exists and is usable.
 ///
 /// # Errors
-/// Returns [`ServerError`] if the content root is missing, not a directory,
+/// Returns [`ServerError`] if an existing content root is not a directory,
 /// cannot be canonicalized, or if binding the listener fails.
 pub async fn startup(config: &Config) -> Result<Startup, ServerError> {
-    let metadata = tokio::fs::metadata(&config.content_root)
-        .await
-        .map_err(|source| ServerError::ContentRootMetadata {
-            path: config.content_root.clone(),
-            source,
-        })?;
+    let content_root = match tokio::fs::metadata(&config.content_root).await {
+        Ok(metadata) => {
+            if !metadata.is_dir() {
+                return Err(ServerError::ContentRootNotDirectory(
+                    config.content_root.clone(),
+                ));
+            }
 
-    if !metadata.is_dir() {
-        return Err(ServerError::ContentRootNotDirectory(
-            config.content_root.clone(),
-        ));
-    }
-
-    let content_root = tokio::fs::canonicalize(&config.content_root)
-        .await
-        .map_err(|source| ServerError::ContentRootCanonicalize {
-            path: config.content_root.clone(),
-            source,
-        })?;
+            Some(
+                tokio::fs::canonicalize(&config.content_root)
+                    .await
+                    .map_err(|source| ServerError::ContentRootCanonicalize {
+                        path: config.content_root.clone(),
+                        source,
+                    })?,
+            )
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            tracing::warn!(
+                path = %config.content_root.display(),
+                "content root missing; serving embedded default page for /"
+            );
+            None
+        }
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                path = %config.content_root.display(),
+                "content root unavailable; serving embedded default page for /"
+            );
+            None
+        }
+    };
 
     let listener = TcpListener::bind(config.listen_addr)
         .await

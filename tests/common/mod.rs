@@ -27,6 +27,10 @@ impl TestServer {
         };
 
         let startup: Startup = startup(&config).await.expect("startup");
+        Self::spawn_with_startup(startup).await
+    }
+
+    pub async fn spawn_with_startup(startup: Startup) -> Self {
         let addr = startup.listener.local_addr().expect("local addr");
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let task = tokio::spawn(async move {

@@ -62,19 +62,18 @@ Responsibilities:
 
 ## Content packaging and deployment
 
-`tiny-httpd` does not build, fetch, or mutate site content. The process only requires that `content_root` points to a readable directory before startup validation runs. Content must be immutable for the lifetime of a running Pod.
+`tiny-httpd` does not build, fetch, or mutate site content. Content must be immutable for the lifetime of a running Pod.
 
-The reference deployment packages the server binary and generated HTML/static assets into one final application image:
+The base server image ships binary only:
 
 ```Dockerfile
 FROM tiny-httpd:<version> AS server
 FROM scratch
 COPY --from=server /app/tiny-httpd /app/tiny-httpd
-COPY ./public /app/public
 ENTRYPOINT ["/app/tiny-httpd"]
 ```
 
-This keeps each rollout tied to one image digest, works with a `scratch` runtime image, and requires no runtime shell, package manager, network fetch, or sidecar.
+If no content is present at startup, the server still starts and serves an embedded default welcome page at `/`. This keeps the base image self-contained and useful before downstream content injection.
 
 A supported alternate deployment may package content in a separate immutable content image and copy it into a shared volume with an init container before `tiny-httpd` starts. The main server container still runs the same binary image and reads from `content_root`, usually mounted read-only:
 
@@ -114,10 +113,12 @@ Configuration is supplied by command-line flags and/or environment variables. De
 
 Startup fails if:
 
-- the content root does not exist,
-- the content root is not a directory,
+- the content root exists but is not a directory,
+- the content root exists but cannot be canonicalized,
 - the configured listen socket cannot be bound,
 - telemetry initialization returns an error.
+
+If the content root is missing or otherwise unavailable during startup inspection, startup logs a warning, continues, and enables the embedded default welcome page fallback.
 
 ## HTTP behavior
 
@@ -143,6 +144,17 @@ Resolution rules:
 | `/foo.html` | `foo.html` |
 
 If no candidate resolves to a regular file, return `404 Not Found`.
+
+### Default welcome page
+
+The binary embeds a default HTML welcome page at compile time.
+
+Fallback rules:
+
+- If no usable content root is available, `GET /` and `HEAD /` return the embedded page.
+- If a content root exists but `/index.html` is absent, `GET /` and `HEAD /` return the embedded page.
+- All non-root paths still return normal `404 Not Found` when no file resolves.
+- If a user-provided `/index.html` exists, it always takes precedence over the embedded page.
 
 The server does not perform implicit redirects for missing or extra trailing slashes.
 
@@ -192,7 +204,7 @@ The service exposes Kubernetes-specific probe endpoints:
 | Endpoint | Purpose | Success criteria |
 | --- | --- | --- |
 | `/livez` | Liveness probe | Process is running and can handle an HTTP request. |
-| `/readyz` | Readiness probe | Startup validation completed and the content root remains readable. |
+| `/readyz` | Readiness probe | Startup validation completed and the server can serve requests; if a content root exists, it must remain readable. |
 
 Probe routes are reserved and take precedence over static files with the same path. They should be used by Kubernetes probes and should not be routed publicly by ingress.
 
@@ -274,13 +286,6 @@ Avoid adding a full web framework unless routing or middleware requirements grow
 ## Container image
 
 The reference release image contains only:
-
-```text
-/app/tiny-httpd
-/app/public/...
-```
-
-The server-only base image used by the alternate content-image deployment may contain only:
 
 ```text
 /app/tiny-httpd
