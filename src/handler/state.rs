@@ -8,7 +8,7 @@ use crate::metrics::HttpMetrics;
 /// Shared application state for request handling.
 #[derive(Debug)]
 pub(crate) struct AppState {
-    pub(crate) content_root: PathBuf,
+    pub(crate) content_root: Option<PathBuf>,
     pub(crate) ready: AtomicBool,
     pub(crate) shutting_down: AtomicBool,
     metrics: HttpMetrics,
@@ -18,11 +18,11 @@ impl AppState {
     /// Creates request handling state.
     ///
     /// # Arguments
-    /// * `content_root` - Canonical content root validated during startup.
+    /// * `content_root` - Canonical content root validated during startup when available.
     ///
     /// # Returns
     /// A ready [`AppState`] instance.
-    pub(crate) fn new(content_root: PathBuf) -> Self {
+    pub(crate) fn new(content_root: Option<PathBuf>) -> Self {
         Self {
             content_root,
             ready: AtomicBool::new(true),

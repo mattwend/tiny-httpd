@@ -14,5 +14,4 @@ RUN cargo build --release --target x86_64-unknown-linux-musl
 
 FROM scratch
 COPY --from=build /workspace/tiny-httpd/target/x86_64-unknown-linux-musl/release/tiny-httpd /app/tiny-httpd
-COPY --from=build /workspace/tiny-httpd/public /app/public
 ENTRYPOINT ["/app/tiny-httpd"]

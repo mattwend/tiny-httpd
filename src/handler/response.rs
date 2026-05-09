@@ -67,7 +67,7 @@ pub(crate) fn response_builder(status: StatusCode) -> hyper::http::response::Bui
     Response::builder().status(status)
 }
 
-fn full_body<T>(body: T) -> ResponseBody
+pub(crate) fn full_body<T>(body: T) -> ResponseBody
 where
     T: Into<Bytes>,
 {

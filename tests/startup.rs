@@ -6,23 +6,19 @@ fn telemetry_init_errors_are_propagated_at_startup() {
 }
 
 #[tokio::test]
-async fn startup_fails_when_content_root_is_missing() {
+async fn startup_succeeds_when_content_root_is_missing() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let missing = tempdir.path().join("missing");
     let config = Config {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: missing.clone(),
+        content_root: missing,
         service_name: "tiny-httpd-test".to_string(),
     };
 
-    let error = startup(&config)
+    let startup = startup(&config)
         .await
-        .err()
-        .expect("missing content root should fail");
-    assert!(matches!(
-        error,
-        ServerError::ContentRootMetadata { path, .. } if path == missing
-    ));
+        .expect("missing content root should not fail");
+    assert!(startup.content_root().is_none());
 }
 
 #[tokio::test]

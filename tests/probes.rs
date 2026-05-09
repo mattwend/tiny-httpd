@@ -111,6 +111,25 @@ async fn probe_routes_accept_non_get_methods() {
 }
 
 #[tokio::test]
+async fn readyz_returns_200_when_content_root_missing_at_startup() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let missing = tempdir.path().join("missing");
+    let server = TestServer::spawn(missing).await;
+
+    let ready = server.request(Method::GET, "/readyz").await;
+    assert_eq!(ready.status(), StatusCode::OK);
+    let body = ready
+        .into_body()
+        .collect()
+        .await
+        .expect("readyz body")
+        .to_bytes();
+    assert_eq!(&body[..], b"ready\n");
+
+    server.shutdown().await;
+}
+
+#[tokio::test]
 async fn readyz_returns_503_after_content_root_loss() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let root = tempdir.path().join("public");
