@@ -96,12 +96,12 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> ResponseOut
                 }
             },
         };
-        if state.ready.load(Ordering::SeqCst) && readable {
+        if state.ready.load(Ordering::Acquire) && readable {
             debug!("readiness probe passed");
             return probe_response(method == Method::HEAD, StatusCode::OK, "ready\n");
         }
         warn!(
-            ready = state.ready.load(Ordering::SeqCst),
+            ready = state.ready.load(Ordering::Acquire),
             readable, "readiness probe failed"
         );
         return probe_response(
@@ -119,7 +119,7 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> ResponseOut
         );
     }
 
-    if state.shutting_down.load(Ordering::SeqCst) {
+    if state.shutting_down.load(Ordering::Acquire) {
         debug!("rejecting non-probe request during shutdown drain");
         return text_response(StatusCode::SERVICE_UNAVAILABLE, "not ready\n");
     }
