@@ -11,7 +11,7 @@ No TLS — let your ingress or service mesh handle that.
 - `GET` and `HEAD` only; blocks path traversal and symlink escapes
 - Kubernetes liveness (`/livez`) and readiness (`/readyz`) probes
 - Graceful shutdown with readiness drain to support zero-downtime rollouts
-- Configurable HTTP/1 header-read timeout and connection lifetime limit
+- Configurable HTTP/1 header-read, idle-connection, and graceful-close timeouts
 - Structured tracing and HTTP request metrics
 - Static musl binary in a `scratch` container image
 
@@ -52,6 +52,7 @@ Environment variables can be overridden by CLI flags.
 | `TINY_HTTPD_SERVICE_NAME` | `--service-name` | `tiny-httpd` |
 | `TINY_HTTPD_HEADER_READ_TIMEOUT_SECS` | `--header-read-timeout-secs` | `30` |
 | `TINY_HTTPD_IDLE_CONNECTION_TIMEOUT_SECS` | `--idle-connection-timeout-secs` | `60` |
+| `TINY_HTTPD_GRACEFUL_CLOSE_TIMEOUT_SECS` | `--graceful-close-timeout-secs` | `5` |
 
 ## Path resolution
 

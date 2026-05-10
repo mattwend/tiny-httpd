@@ -26,8 +26,8 @@ Probe routes (`/livez`, `/readyz`) take precedence over static files.
   (default: `30s`). Slow header trickles are disconnected.
 - Open connections may remain idle only up to the configured idle-connection
   timeout (default: `60s`). This bounds keep-alive idle resource usage.
-- Once a connection starts graceful shutdown, it gets a fixed **5 s** hard cap
-  before the server drops it.
+- Once a connection starts graceful shutdown, it gets the configured
+  graceful-close timeout (default: `5s`) before the server drops it.
 
 ### Response headers
 
@@ -80,7 +80,8 @@ On `SIGTERM`:
    can observe the `503` from `/readyz` before the socket closes.
 3. Listener closes. Existing connections, including any accepted during the
    drain window, receive graceful-shutdown signaling after accepts stop.
-   Each connection then gets up to **5 s** to finish cleanly.
+   Each connection then gets up to the configured graceful-close timeout
+   (default: **5 s**) to finish cleanly.
 4. The server waits up to a **10 s** process-level drain timeout for all
    connection tasks to finish.
 5. Remaining connections are aborted after timeout.

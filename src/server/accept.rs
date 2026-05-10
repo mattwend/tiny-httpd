@@ -29,10 +29,6 @@ use crate::{
 /// Time to keep listener accepting only readiness observations after shutdown starts.
 const READINESS_DRAIN_WINDOW_MILLIS: u64 = 250;
 
-/// Hard cap for a single connection's graceful shutdown to complete after
-/// idle timeout or server shutdown triggers it.
-const GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
-
 /// IO wrapper that signals activity on reads/writes via a [`Notify`].
 ///
 /// When any bytes flow through the connection the shared `Notify` is signalled,
@@ -166,6 +162,7 @@ where
         local_addr,
         startup.header_read_timeout,
         startup.idle_connection_timeout,
+        startup.graceful_close_timeout,
         shutdown,
     )
     .await
@@ -179,6 +176,7 @@ where
 /// * `local_addr` - Listener address for startup logging.
 /// * `header_read_timeout` - Maximum time allowed to receive complete HTTP/1 request headers.
 /// * `idle_connection_timeout` - Maximum idle time allowed for one open connection.
+/// * `graceful_close_timeout` - Maximum graceful-close time for one draining connection.
 /// * `shutdown` - Factory producing a future that resolves when shutdown begins.
 ///
 /// # Returns
@@ -203,6 +201,7 @@ pub(crate) async fn run_with_state<F, Fut>(
     local_addr: SocketAddr,
     header_read_timeout: Duration,
     idle_connection_timeout: Duration,
+    graceful_close_timeout: Duration,
     shutdown: F,
 ) -> Result<(), ServerError>
 where
@@ -221,7 +220,7 @@ where
         %local_addr,
         header_read_timeout_secs = header_read_timeout.as_secs(),
         idle_connection_timeout_secs = idle_connection_timeout.as_secs(),
-        graceful_close_timeout_secs = GRACEFUL_CLOSE_TIMEOUT_SECS,
+        graceful_close_timeout_secs = graceful_close_timeout.as_secs(),
         "tiny-httpd listening"
     );
 
@@ -287,9 +286,9 @@ where
                             debug_assert!(!shutting_down, "graceful shutdown started twice");
                             connection.as_mut().graceful_shutdown();
                             shutting_down = true;
-                            deadline.as_mut().reset(
-                                Instant::now() + Duration::from_secs(GRACEFUL_CLOSE_TIMEOUT_SECS),
-                            );
+                            deadline
+                                .as_mut()
+                                .reset(Instant::now() + graceful_close_timeout);
                         };
                     }
 

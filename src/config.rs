@@ -11,6 +11,7 @@ const DEFAULT_CONTENT_ROOT: &str = "/app/public";
 const DEFAULT_SERVICE_NAME: &str = "tiny-httpd";
 const DEFAULT_HEADER_READ_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
+const DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
 
 /// Runtime configuration loaded from command-line flags and environment variables.
 #[must_use]
@@ -26,6 +27,8 @@ pub struct Config {
     pub header_read_timeout_secs: u64,
     /// Maximum idle time before server closes an inactive connection.
     pub idle_connection_timeout_secs: u64,
+    /// Maximum graceful-close time before a draining connection is dropped.
+    pub graceful_close_timeout_secs: u64,
 }
 
 /// Errors produced while parsing runtime configuration.
@@ -64,6 +67,14 @@ struct CliArgs {
         value_parser = clap::value_parser!(u64).range(1..),
     )]
     idle_connection_timeout_secs: u64,
+    /// Maximum graceful-close time (seconds) before a draining connection is dropped.
+    #[arg(
+        long,
+        env = "TINY_HTTPD_GRACEFUL_CLOSE_TIMEOUT_SECS",
+        default_value_t = DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
+        value_parser = clap::value_parser!(u64).range(1..),
+    )]
+    graceful_close_timeout_secs: u64,
 }
 
 impl Config {
@@ -82,6 +93,7 @@ impl Config {
     /// | `--service-name` | `TINY_HTTPD_SERVICE_NAME` | `tiny-httpd` |
     /// | `--header-read-timeout-secs` | `TINY_HTTPD_HEADER_READ_TIMEOUT_SECS` | `30` |
     /// | `--idle-connection-timeout-secs` | `TINY_HTTPD_IDLE_CONNECTION_TIMEOUT_SECS` | `60` |
+    /// | `--graceful-close-timeout-secs` | `TINY_HTTPD_GRACEFUL_CLOSE_TIMEOUT_SECS` | `5` |
     ///
     /// # Returns
     /// A parsed [`Config`] with defaults for unset values.
@@ -112,6 +124,7 @@ impl Default for Config {
             service_name: DEFAULT_SERVICE_NAME.to_string(),
             header_read_timeout_secs: DEFAULT_HEADER_READ_TIMEOUT_SECS,
             idle_connection_timeout_secs: DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS,
+            graceful_close_timeout_secs: DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
         }
     }
 }
@@ -124,6 +137,7 @@ impl From<CliArgs> for Config {
             service_name: cli.service_name,
             header_read_timeout_secs: cli.header_read_timeout_secs,
             idle_connection_timeout_secs: cli.idle_connection_timeout_secs,
+            graceful_close_timeout_secs: cli.graceful_close_timeout_secs,
         }
     }
 }
