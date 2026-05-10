@@ -1,3 +1,5 @@
+//! HTTP request handling, routing, and response helpers.
+
 mod default_page;
 mod response;
 mod routing;

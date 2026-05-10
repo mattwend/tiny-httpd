@@ -1,3 +1,7 @@
+/// Waits for process shutdown signal.
+///
+/// On Unix, resolves on either `SIGTERM` or Ctrl-C (`SIGINT`). On non-Unix
+/// platforms, resolves on Ctrl-C only.
 pub(super) async fn shutdown_signal() -> Result<(), std::io::Error> {
     #[cfg(unix)]
     {

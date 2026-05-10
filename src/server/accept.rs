@@ -17,6 +17,7 @@ use crate::{
     server::{DRAIN_TIMEOUT_SECS, ServerError, Startup},
 };
 
+/// Time to keep listener accepting only readiness observations after shutdown starts.
 const READINESS_DRAIN_WINDOW_MILLIS: u64 = 250;
 
 /// Runs the Hyper accept loop until a shutdown signal is received.
@@ -166,6 +167,7 @@ where
     Ok(())
 }
 
+/// Waits for spawned connection tasks and logs task-level failures.
 async fn drain_connections(connections: &mut JoinSet<()>) {
     while let Some(result) = connections.join_next().await {
         if let Err(error) = result {

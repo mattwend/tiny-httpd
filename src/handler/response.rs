@@ -17,6 +17,18 @@ use crate::fs::{ResolveError, resolve_file};
 /// Boxed response body type used by all HTTP responses.
 pub(crate) type ResponseBody = BoxBody<Bytes, Box<dyn Error + Send + Sync>>;
 
+/// Builds a file-serving response for a resolved request path.
+///
+/// # Arguments
+/// * `content_root` - Canonical content root used for safe path resolution.
+/// * `path` - Request URI path to resolve and serve.
+/// * `head_only` - When `true`, omits the body while preserving headers.
+///
+/// # Returns
+/// A `200 OK` response with guessed MIME type and content length headers.
+///
+/// # Errors
+/// Returns [`ResolveError`] when request-path resolution or file access fails.
 pub(crate) async fn file_response(
     content_root: &std::path::Path,
     path: &str,
@@ -41,10 +53,17 @@ pub(crate) async fn file_response(
         .unwrap_or_else(|error| internal_error_response("failed to build file response", error)))
 }
 
+/// Builds a plain-text response with default text content type.
 pub(crate) fn text_response(status: StatusCode, body: &'static str) -> Response<ResponseBody> {
     text_response_with_headers(status, body, &[])
 }
 
+/// Builds a plain-text response with caller-supplied extra headers.
+///
+/// # Arguments
+/// * `status` - HTTP status code for response.
+/// * `body` - Static UTF-8 response body.
+/// * `headers` - Extra header name/value pairs appended to response.
 pub(crate) fn text_response_with_headers(
     status: StatusCode,
     body: &'static str,
@@ -63,10 +82,12 @@ pub(crate) fn text_response_with_headers(
         .unwrap_or_else(|error| internal_error_response("failed to build text response", error))
 }
 
+/// Creates a response builder preloaded with status code.
 pub(crate) fn response_builder(status: StatusCode) -> hyper::http::response::Builder {
     Response::builder().status(status)
 }
 
+/// Boxes in-memory body bytes into shared response body type.
 pub(crate) fn full_body<T>(body: T) -> ResponseBody
 where
     T: Into<Bytes>,
@@ -76,12 +97,14 @@ where
         .boxed()
 }
 
+/// Returns empty boxed response body for bodyless responses.
 pub(crate) fn empty_response_body() -> ResponseBody {
     Empty::<Bytes>::new()
         .map_err(|never| match never {})
         .boxed()
 }
 
+/// Streams file contents into shared response body type.
 fn stream_body(file: File) -> ResponseBody {
     let stream = ReaderStream::new(file)
         .map_ok(Frame::data)
@@ -89,6 +112,7 @@ fn stream_body(file: File) -> ResponseBody {
     BodyExt::boxed(StreamBody::new(stream))
 }
 
+/// Logs response-construction failure and falls back to generic `500`.
 fn internal_error_response<T>(context: &'static str, error: T) -> Response<ResponseBody>
 where
     T: Display,
