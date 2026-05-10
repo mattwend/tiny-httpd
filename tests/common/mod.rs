@@ -24,6 +24,7 @@ impl TestServer {
             listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
             content_root,
             service_name: "tiny-httpd-test".to_string(),
+            ..Config::default()
         };
 
         let startup: Startup = startup(&config).await.expect("startup");

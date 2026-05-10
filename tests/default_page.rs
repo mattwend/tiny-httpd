@@ -55,6 +55,7 @@ async fn missing_content_root_starts_and_serves_default_page() {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: missing,
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let startup = startup(&config).await.expect("startup");
@@ -82,6 +83,7 @@ async fn missing_content_root_returns_404_for_other_paths() {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: missing,
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let startup = startup(&config).await.expect("startup");

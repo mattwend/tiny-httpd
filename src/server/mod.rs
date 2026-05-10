@@ -25,6 +25,10 @@ pub struct Startup {
     pub listener: TcpListener,
     /// Canonical content-root path validated during startup when available.
     pub(crate) content_root: Option<PathBuf>,
+    /// Maximum time allowed to receive complete HTTP/1 request headers.
+    pub(crate) header_read_timeout: std::time::Duration,
+    /// Maximum idle time before server closes an inactive connection.
+    pub(crate) idle_connection_timeout: std::time::Duration,
 }
 
 impl Startup {
@@ -120,5 +124,9 @@ pub async fn startup(config: &Config) -> Result<Startup, ServerError> {
     Ok(Startup {
         listener,
         content_root,
+        header_read_timeout: std::time::Duration::from_secs(config.header_read_timeout_secs),
+        idle_connection_timeout: std::time::Duration::from_secs(
+            config.idle_connection_timeout_secs,
+        ),
     })
 }
