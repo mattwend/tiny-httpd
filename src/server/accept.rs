@@ -9,12 +9,12 @@ use std::{
 use hyper::service::service_fn;
 use hyper_util::{
     rt::{TokioIo, TokioTimer},
-    server::{conn::auto::Builder as AutoBuilder, graceful::GracefulShutdown},
+    server::conn::auto::Builder as AutoBuilder,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::TcpListener,
-    sync::Notify,
+    sync::{Notify, watch},
     task::JoinSet,
     time::{Instant, Sleep, timeout},
 };
@@ -28,6 +28,10 @@ use crate::{
 
 /// Time to keep listener accepting only readiness observations after shutdown starts.
 const READINESS_DRAIN_WINDOW_MILLIS: u64 = 250;
+
+/// Hard cap for a single connection's graceful shutdown to complete after
+/// idle timeout or server shutdown triggers it.
+const GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
 
 /// IO wrapper that signals activity on reads/writes via a [`Notify`].
 ///
@@ -186,7 +190,7 @@ where
 /// do not stop the server.
 ///
 /// # Notes
-/// This implementation uses hyper-util graceful connection shutdown so
+/// This implementation manually coordinates per-connection graceful shutdown so
 /// in-flight requests can complete while idle keep-alive connections are asked
 /// to close promptly. On shutdown, readiness is flipped before the accept loop
 /// exits, and the listener remains open for a short bounded drain window so a
@@ -205,7 +209,7 @@ where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), std::io::Error>>,
 {
-    let graceful = GracefulShutdown::new();
+    let (shutdown_tx, _) = watch::channel(false);
     let mut connections = JoinSet::new();
     let mut builder = AutoBuilder::new(hyper_util::rt::TokioExecutor::new());
     builder.http1().timer(TokioTimer::new());
@@ -217,6 +221,7 @@ where
         %local_addr,
         header_read_timeout_secs = header_read_timeout.as_secs(),
         idle_connection_timeout_secs = idle_connection_timeout.as_secs(),
+        graceful_close_timeout_secs = GRACEFUL_CLOSE_TIMEOUT_SECS,
         "tiny-httpd listening"
     );
 
@@ -235,6 +240,10 @@ where
                     drain_window_ms = READINESS_DRAIN_WINDOW_MILLIS,
                     "shutdown requested; continuing to serve readiness responses before stopping accepts"
                 );
+                // Existing and newly accepted connections keep running during the
+                // readiness drain window. Shutdown signaling starts after the
+                // window expires so readiness probes can still observe the open
+                // listener before accepts stop.
             }
             () = async {
                 if let Some(deadline) = shutdown_deadline.as_mut() {
@@ -256,18 +265,18 @@ where
                 let io = TokioIo::new(ActivityIo::new(stream, Arc::clone(&activity)));
                 let service_state = Arc::clone(&state);
                 let connection_builder = builder.clone();
-                let watcher = graceful.watcher();
+                let mut shutdown_rx = shutdown_tx.subscribe();
                 connections.spawn(async move {
                     let service = service_fn(move |request| {
                         let request_state = Arc::clone(&service_state);
                         handle_with_peer_addr(request_state, request, Some(peer_addr))
                     });
                     let connection = connection_builder.serve_connection(io, service).into_owned();
-                    let connection = watcher.watch(connection);
                     tokio::pin!(connection);
 
                     let deadline = tokio::time::sleep(idle_connection_timeout);
                     tokio::pin!(deadline);
+                    let mut shutting_down = false;
 
                     loop {
                         tokio::select! {
@@ -281,14 +290,43 @@ where
                                 break;
                             }
                             () = &mut deadline => {
+                                if shutting_down {
+                                    warn!(%peer_addr, "graceful connection shutdown timed out; dropping connection");
+                                    break;
+                                }
                                 warn!(
                                     %peer_addr,
                                     idle_connection_timeout_secs = idle_connection_timeout.as_secs(),
                                     "idle connection timeout reached; starting graceful connection shutdown"
                                 );
-                                break;
+                                connection.as_mut().graceful_shutdown();
+                                shutting_down = true;
+                                deadline.as_mut().reset(
+                                    Instant::now() + Duration::from_secs(GRACEFUL_CLOSE_TIMEOUT_SECS),
+                                );
                             }
-                            () = activity.notified() => {
+                            changed = shutdown_rx.changed(), if !shutting_down => {
+                                match changed {
+                                    Ok(()) => {
+                                        if *shutdown_rx.borrow() {
+                                            connection.as_mut().graceful_shutdown();
+                                            shutting_down = true;
+                                            deadline.as_mut().reset(
+                                                Instant::now() + Duration::from_secs(GRACEFUL_CLOSE_TIMEOUT_SECS),
+                                            );
+                                        }
+                                    }
+                                    Err(error) => {
+                                        warn!(%peer_addr, error = %error, "shutdown signal channel closed unexpectedly; starting graceful connection shutdown");
+                                        connection.as_mut().graceful_shutdown();
+                                        shutting_down = true;
+                                        deadline.as_mut().reset(
+                                            Instant::now() + Duration::from_secs(GRACEFUL_CLOSE_TIMEOUT_SECS),
+                                        );
+                                    }
+                                }
+                            }
+                            () = activity.notified(), if !shutting_down => {
                                 deadline.as_mut().reset(Instant::now() + idle_connection_timeout);
                             }
                         }
@@ -298,7 +336,14 @@ where
         }
     }
 
-    match timeout(Duration::from_secs(DRAIN_TIMEOUT_SECS), graceful.shutdown()).await {
+    let _ = shutdown_tx.send(true);
+
+    match timeout(
+        Duration::from_secs(DRAIN_TIMEOUT_SECS),
+        drain_connections(&mut connections),
+    )
+    .await
+    {
         Ok(()) => info!("all connections drained gracefully"),
         Err(_) => {
             warn!(
@@ -306,10 +351,9 @@ where
                 "connection drain timed out; aborting remaining tasks"
             );
             connections.abort_all();
+            drain_connections(&mut connections).await;
         }
     }
-
-    drain_connections(&mut connections).await;
 
     Ok(())
 }
