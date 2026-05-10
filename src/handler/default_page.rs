@@ -5,34 +5,27 @@ use hyper::{
 use tracing::error;
 
 use crate::handler::response::{
-    ResponseBody, ResponseOutcome, empty_response_body, full_body, response_builder,
+    ResponseBody, ResponseOutcome, empty_response_body, full_body, internal_error_response,
 };
 
-const DEFAULT_INDEX: &str = include_str!("../default_index.html");
+pub(crate) const DEFAULT_INDEX_HTML: &str = include_str!("../default_index.html");
 
 /// Builds response for embedded fallback index page.
 pub(crate) fn default_index_response(head_only: bool) -> Response<ResponseBody> {
     let body = if head_only {
         empty_response_body()
     } else {
-        full_body(DEFAULT_INDEX)
+        full_body(DEFAULT_INDEX_HTML)
     };
 
-    response_builder(StatusCode::OK)
+    Response::builder()
+        .status(StatusCode::OK)
         .header(CONTENT_TYPE, "text/html; charset=utf-8")
-        .header(CONTENT_LENGTH, DEFAULT_INDEX.len())
+        .header(CONTENT_LENGTH, DEFAULT_INDEX_HTML.len())
         .body(body)
         .unwrap_or_else(|error| {
             error!(error = %error, "failed to build embedded default page response");
-            Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .header(CONTENT_TYPE, "text/plain; charset=utf-8")
-                .header(CONTENT_LENGTH, "22")
-                .body(full_body("internal server error\n"))
-                .unwrap_or_else(|fallback_error| {
-                    error!(error = %fallback_error, "failed to build fallback internal error response for embedded default page");
-                    Response::new(empty_response_body())
-                })
+            internal_error_response("failed to build embedded default page response", error)
         })
 }
 
@@ -46,6 +39,6 @@ pub(crate) fn default_index_response(head_only: bool) -> Response<ResponseBody> 
 pub(crate) fn default_index_outcome(head_only: bool) -> ResponseOutcome {
     ResponseOutcome::new(
         default_index_response(head_only),
-        DEFAULT_INDEX.len() as u64,
+        DEFAULT_INDEX_HTML.len() as u64,
     )
 }

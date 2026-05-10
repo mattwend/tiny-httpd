@@ -66,7 +66,8 @@ pub(crate) async fn file_response(
     };
 
     Ok(ResponseOutcome::new(
-        response_builder(StatusCode::OK)
+        Response::builder()
+            .status(StatusCode::OK)
             .header(CONTENT_TYPE, content_type)
             .header(CONTENT_LENGTH, resolved.content_length)
             .body(body)
@@ -104,7 +105,8 @@ pub(crate) fn text_response_with_headers(
     headers: &[(&'static str, &'static str)],
 ) -> ResponseOutcome {
     let body_size = body.len() as u64;
-    let mut builder = response_builder(status)
+    let mut builder = Response::builder()
+        .status(status)
         .header(CONTENT_TYPE, "text/plain; charset=utf-8")
         .header(CONTENT_LENGTH, body.len());
 
@@ -117,11 +119,6 @@ pub(crate) fn text_response_with_headers(
         .unwrap_or_else(|error| internal_error_response("failed to build text response", error));
 
     ResponseOutcome::new(response, body_size)
-}
-
-/// Creates a response builder preloaded with status code.
-pub(crate) fn response_builder(status: StatusCode) -> hyper::http::response::Builder {
-    Response::builder().status(status)
 }
 
 /// Boxes in-memory body bytes into shared response body type.
@@ -150,16 +147,18 @@ fn stream_body(file: File) -> ResponseBody {
 }
 
 /// Logs response-construction failure and falls back to generic `500`.
-fn internal_error_response<T>(context: &'static str, error: T) -> Response<ResponseBody>
+pub(crate) fn internal_error_response<T>(context: &'static str, error: T) -> Response<ResponseBody>
 where
     T: Display,
 {
     error!(error = %error, context, "failed to construct HTTP response");
+    let body = "internal server error\n";
     Response::builder()
         .status(StatusCode::INTERNAL_SERVER_ERROR)
         .header(CONTENT_TYPE, "text/plain; charset=utf-8")
-        .body(full_body("internal server error\n"))
-        .unwrap_or_else(|_| Response::new(full_body("internal server error\n")))
+        .header(CONTENT_LENGTH, body.len())
+        .body(full_body(body))
+        .unwrap_or_else(|_| Response::new(full_body(body)))
 }
 
 #[cfg(test)]
