@@ -15,7 +15,7 @@ pub fn client() -> Client<HttpConnector, Empty<Bytes>> {
 pub struct TestServer {
     addr: std::net::SocketAddr,
     shutdown_tx: Option<oneshot::Sender<()>>,
-    task: JoinHandle<Result<(), tiny_httpd::ServerError>>,
+    task: Option<JoinHandle<Result<(), tiny_httpd::ServerError>>>,
 }
 
 impl TestServer {
@@ -44,7 +44,7 @@ impl TestServer {
         Self {
             addr,
             shutdown_tx: Some(shutdown_tx),
-            task,
+            task: Some(task),
         }
     }
 
@@ -70,10 +70,27 @@ impl TestServer {
             let _ = shutdown_tx.send(());
         }
 
-        let result = tokio::time::timeout(std::time::Duration::from_secs(2), self.task)
-            .await
-            .expect("server task should exit promptly")
-            .expect("join server task");
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            self.task.take().expect("server task handle"),
+        )
+        .await
+        .expect("server task should exit promptly")
+        .expect("join server task");
         result.expect("server result");
+    }
+}
+
+impl Drop for TestServer {
+    fn drop(&mut self) {
+        if self.shutdown_tx.is_some() {
+            eprintln!(
+                "TestServer at {} dropped without shutdown(); aborting server task",
+                self.addr
+            );
+            if let Some(task) = self.task.take() {
+                task.abort();
+            }
+        }
     }
 }

@@ -19,6 +19,7 @@ const DRAIN_TIMEOUT_SECS: u64 = 10;
 
 /// Validated startup state returned by [`startup`] and consumed by [`run`] or
 /// [`run_with_shutdown`].
+#[must_use]
 pub struct Startup {
     /// Bound TCP listener ready to accept connections.
     pub listener: TcpListener,
