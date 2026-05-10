@@ -6,7 +6,7 @@ use std::{
 
 use hyper::{Method, Request, Response, StatusCode, header::ALLOW};
 use tokio::fs;
-use tracing::{Instrument, debug, debug_span, info_span, warn};
+use tracing::{Instrument, Span, debug, debug_span, info_span, warn};
 
 use crate::{
     fs::ResolveError,
@@ -44,29 +44,12 @@ where
     let method = request.method().clone();
     let path = request.uri().path().to_string();
     let peer_addr = peer_addr.map(|addr| addr.to_string());
-    let span = if path == "/livez" || path == "/readyz" {
-        debug_span!(
-            "http.request",
-            http.request.method = %method,
-            url.path = %path,
-            network.peer.address = peer_addr.as_deref().unwrap_or(""),
-            http.response.status_code = tracing::field::Empty,
-            http.response.status_class = tracing::field::Empty,
-            http.response.body.size = tracing::field::Empty,
-            http.server.request.duration_us = tracing::field::Empty,
-        )
-    } else {
-        info_span!(
-            "http.request",
-            http.request.method = %method,
-            url.path = %path,
-            network.peer.address = peer_addr.as_deref().unwrap_or(""),
-            http.response.status_code = tracing::field::Empty,
-            http.response.status_class = tracing::field::Empty,
-            http.response.body.size = tracing::field::Empty,
-            http.server.request.duration_us = tracing::field::Empty,
-        )
-    };
+    let span = request_span(
+        &method,
+        &path,
+        peer_addr.as_deref().unwrap_or(""),
+        path == "/livez" || path == "/readyz",
+    );
 
     async move {
         let started = Instant::now();
@@ -158,6 +141,30 @@ fn fallback_default_response(path: &str, head_only: bool) -> ResponseOutcome {
         default_index_outcome(head_only)
     } else {
         text_response(StatusCode::NOT_FOUND, "not found\n")
+    }
+}
+
+/// Builds request span with common HTTP tracing fields.
+fn request_span(method: &Method, path: &str, peer_addr: &str, debug_probe: bool) -> Span {
+    macro_rules! http_request_span {
+        ($span_macro:ident) => {
+            $span_macro!(
+                "http.request",
+                http.request.method = %method,
+                url.path = %path,
+                network.peer.address = peer_addr,
+                http.response.status_code = tracing::field::Empty,
+                http.response.status_class = tracing::field::Empty,
+                http.response.body.size = tracing::field::Empty,
+                http.server.request.duration_us = tracing::field::Empty,
+            )
+        };
+    }
+
+    if debug_probe {
+        http_request_span!(debug_span)
+    } else {
+        http_request_span!(info_span)
     }
 }
 
