@@ -4,7 +4,9 @@ use hyper::{
 };
 use tracing::error;
 
-use crate::handler::response::{ResponseBody, empty_response_body, full_body, response_builder};
+use crate::handler::response::{
+    ResponseBody, ResponseOutcome, empty_response_body, full_body, response_builder,
+};
 
 const DEFAULT_INDEX: &str = include_str!("../default_index.html");
 
@@ -32,4 +34,18 @@ pub(crate) fn default_index_response(head_only: bool) -> Response<ResponseBody> 
                     Response::new(empty_response_body())
                 })
         })
+}
+
+/// Builds response outcome for embedded fallback index page.
+///
+/// # Arguments
+/// * `head_only` - When `true`, omits the body while preserving headers.
+///
+/// # Returns
+/// A response outcome with the embedded page response and exact body size.
+pub(crate) fn default_index_outcome(head_only: bool) -> ResponseOutcome {
+    ResponseOutcome::new(
+        default_index_response(head_only),
+        DEFAULT_INDEX.len() as u64,
+    )
 }

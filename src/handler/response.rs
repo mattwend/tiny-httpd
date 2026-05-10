@@ -17,6 +17,25 @@ use crate::fs::{ResolveError, resolve_file};
 /// Boxed response body type used by all HTTP responses.
 pub(crate) type ResponseBody = BoxBody<Bytes, Box<dyn Error + Send + Sync>>;
 
+/// HTTP response plus body-size metadata for metrics and tracing.
+#[must_use]
+pub(crate) struct ResponseOutcome {
+    /// Final HTTP response.
+    pub(crate) response: Response<ResponseBody>,
+    /// Response body size in bytes before HEAD-body stripping.
+    pub(crate) body_size: u64,
+}
+
+impl ResponseOutcome {
+    /// Wraps a response with explicit body-size metadata.
+    pub(crate) fn new(response: Response<ResponseBody>, body_size: u64) -> Self {
+        Self {
+            response,
+            body_size,
+        }
+    }
+}
+
 /// Builds a file-serving response for a resolved request path.
 ///
 /// # Arguments
@@ -33,7 +52,7 @@ pub(crate) async fn file_response(
     content_root: &std::path::Path,
     path: &str,
     head_only: bool,
-) -> Result<Response<ResponseBody>, ResolveError> {
+) -> Result<ResponseOutcome, ResolveError> {
     let resolved = resolve_file(content_root, path).await?;
     let content_type = mime_guess::from_path(&resolved.canonical_path)
         .first_or_octet_stream()
@@ -46,29 +65,45 @@ pub(crate) async fn file_response(
         stream_body(resolved.file)
     };
 
-    Ok(response_builder(StatusCode::OK)
-        .header(CONTENT_TYPE, content_type)
-        .header(CONTENT_LENGTH, resolved.content_length)
-        .body(body)
-        .unwrap_or_else(|error| internal_error_response("failed to build file response", error)))
+    Ok(ResponseOutcome::new(
+        response_builder(StatusCode::OK)
+            .header(CONTENT_TYPE, content_type)
+            .header(CONTENT_LENGTH, resolved.content_length)
+            .body(body)
+            .unwrap_or_else(|error| {
+                internal_error_response("failed to build file response", error)
+            }),
+        resolved.content_length,
+    ))
 }
 
-/// Builds a plain-text response with default text content type.
-pub(crate) fn text_response(status: StatusCode, body: &'static str) -> Response<ResponseBody> {
+/// Builds a plain-text response outcome with default text content type.
+///
+/// # Arguments
+/// * `status` - HTTP status code for response.
+/// * `body` - Static UTF-8 response body.
+///
+/// # Returns
+/// A response outcome with the text response and exact body size.
+pub(crate) fn text_response(status: StatusCode, body: &'static str) -> ResponseOutcome {
     text_response_with_headers(status, body, &[])
 }
 
-/// Builds a plain-text response with caller-supplied extra headers.
+/// Builds a plain-text response outcome with caller-supplied extra headers.
 ///
 /// # Arguments
 /// * `status` - HTTP status code for response.
 /// * `body` - Static UTF-8 response body.
 /// * `headers` - Extra header name/value pairs appended to response.
+///
+/// # Returns
+/// A response outcome with the text response and exact body size.
 pub(crate) fn text_response_with_headers(
     status: StatusCode,
     body: &'static str,
     headers: &[(&'static str, &'static str)],
-) -> Response<ResponseBody> {
+) -> ResponseOutcome {
+    let body_size = body.len() as u64;
     let mut builder = response_builder(status)
         .header(CONTENT_TYPE, "text/plain; charset=utf-8")
         .header(CONTENT_LENGTH, body.len());
@@ -77,9 +112,11 @@ pub(crate) fn text_response_with_headers(
         builder = builder.header(*name, *value);
     }
 
-    builder
+    let response = builder
         .body(full_body(body))
-        .unwrap_or_else(|error| internal_error_response("failed to build text response", error))
+        .unwrap_or_else(|error| internal_error_response("failed to build text response", error));
+
+    ResponseOutcome::new(response, body_size)
 }
 
 /// Creates a response builder preloaded with status code.
@@ -123,4 +160,19 @@ where
         .header(CONTENT_TYPE, "text/plain; charset=utf-8")
         .body(full_body("internal server error\n"))
         .unwrap_or_else(|_| Response::new(full_body("internal server error\n")))
+}
+
+#[cfg(test)]
+mod tests {
+    use hyper::StatusCode;
+
+    use super::text_response;
+
+    #[test]
+    fn text_response_carries_explicit_body_size() {
+        let body = "hello\n";
+        let outcome = text_response(StatusCode::OK, body);
+
+        assert_eq!(outcome.body_size, body.len() as u64);
+    }
 }
