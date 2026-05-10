@@ -41,6 +41,7 @@ impl AppState {
         self.shutting_down.store(true, Ordering::SeqCst);
     }
 
+    /// Returns shared HTTP metrics recorder.
     pub(crate) fn metrics(&self) -> &HttpMetrics {
         &self.metrics
     }

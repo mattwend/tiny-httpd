@@ -13,6 +13,7 @@ enum MainError {
     Server(#[from] ServerError),
 }
 
+/// Loads configuration, initializes telemetry, and runs server until shutdown.
 #[tokio::main]
 async fn main() -> Result<(), MainError> {
     let config = Config::from_env_and_args()?;

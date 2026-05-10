@@ -8,6 +8,7 @@ use crate::handler::response::{ResponseBody, empty_response_body, full_body, res
 
 const DEFAULT_INDEX: &str = include_str!("../default_index.html");
 
+/// Builds response for embedded fallback index page.
 pub(crate) fn default_index_response(head_only: bool) -> Response<ResponseBody> {
     let body = if head_only {
         empty_response_body()

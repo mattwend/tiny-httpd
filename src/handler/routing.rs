@@ -33,6 +33,9 @@ use crate::{
 /// # Returns
 /// A Hyper response. Handler errors are converted into HTTP status codes, so the
 /// outer result is infallible for Hyper service integration.
+///
+/// Generic body type `B` is accepted because request bodies are not consumed by
+/// this handler.
 pub async fn handle_with_peer_addr<B>(
     state: Arc<AppState>,
     request: Request<B>,
@@ -100,6 +103,7 @@ where
     .await
 }
 
+/// Routes one request path and method to probes, static files, or fallback page.
 async fn route(state: Arc<AppState>, method: &Method, path: &str) -> Response<ResponseBody> {
     if path == "/livez" {
         debug!("liveness probe handled");
@@ -158,6 +162,7 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> Response<Re
     }
 }
 
+/// Serves embedded index for `/` when content root unavailable, else `404`.
 fn fallback_default_response(path: &str, head_only: bool) -> Response<ResponseBody> {
     if path == "/" {
         default_index_response(head_only)
@@ -166,6 +171,7 @@ fn fallback_default_response(path: &str, head_only: bool) -> Response<ResponseBo
     }
 }
 
+/// Maps file-resolution failures into client-safe HTTP responses.
 fn map_file_error(error: ResolveError) -> Response<ResponseBody> {
     match error {
         ResolveError::BadTarget
@@ -183,6 +189,7 @@ fn map_file_error(error: ResolveError) -> Response<ResponseBody> {
     }
 }
 
+/// Builds liveness or readiness response, preserving `Content-Length` for `HEAD`.
 fn probe_response(
     head_only: bool,
     status: StatusCode,

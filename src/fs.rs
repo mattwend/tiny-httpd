@@ -144,6 +144,7 @@ pub(crate) async fn resolve_file(
     Err(ResolveError::NotFound)
 }
 
+/// Rejects path components that would escape or invalidate relative lookup.
 fn validate_relative_path(relative: &str) -> Result<(), ResolveError> {
     for component in Path::new(relative).components() {
         match component {
@@ -155,6 +156,7 @@ fn validate_relative_path(relative: &str) -> Result<(), ResolveError> {
     Ok(())
 }
 
+/// Percent-decodes request path while rejecting encoded slashes and null bytes.
 fn decode_percent_path(path: &str) -> Result<String, ResolveError> {
     let bytes = path.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
@@ -187,6 +189,7 @@ fn decode_percent_path(path: &str) -> Result<String, ResolveError> {
     String::from_utf8(decoded).map_err(|_| ResolveError::InvalidUtf8)
 }
 
+/// Converts one ASCII hex digit into numeric value.
 fn hex_value(byte: u8) -> Option<u8> {
     match byte {
         b'0'..=b'9' => Some(byte - b'0'),

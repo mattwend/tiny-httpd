@@ -4,6 +4,7 @@ use thiserror::Error;
 /// Errors returned by the telemetry adapter.
 #[derive(Debug, Error)]
 pub enum TelemetryInitError {
+    /// Shared telemetry setup crate failed during initialization.
     #[error("failed to initialize telemetry: {0}")]
     Init(#[from] TelemetryError),
 }

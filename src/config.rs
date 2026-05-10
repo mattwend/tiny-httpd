@@ -13,22 +13,30 @@ const DEFAULT_SERVICE_NAME: &str = "tiny-httpd";
 /// Runtime configuration loaded from command-line flags and environment variables.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
+    /// Socket address server binds during startup.
     pub listen_addr: SocketAddr,
+    /// Filesystem root used for static file lookup.
     pub content_root: PathBuf,
+    /// Service name reported through telemetry.
     pub service_name: String,
 }
 
 /// Errors produced while parsing runtime configuration.
 #[derive(Debug, Error)]
 pub enum ConfigError {
+    /// Listen address could not be parsed as `IP:PORT`.
     #[error("invalid listen address `{value}`: {source}")]
     ListenAddr {
+        /// Original configured value that failed to parse.
         value: String,
+        /// Address parser failure from standard library.
         #[source]
         source: std::net::AddrParseError,
     },
+    /// Known command-line flag was provided without required value.
     #[error("missing value for command-line flag `{0}`")]
     MissingFlagValue(String),
+    /// Command-line argument did not match supported flags.
     #[error("unsupported command-line argument `{0}`")]
     UnsupportedArgument(String),
 }
@@ -140,6 +148,7 @@ impl Config {
     }
 }
 
+/// Parses configured listen address and preserves original value in errors.
 fn parse_listen_addr(value: &str) -> Result<SocketAddr, ConfigError> {
     value.parse().map_err(|source| ConfigError::ListenAddr {
         value: value.to_string(),
