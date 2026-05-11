@@ -278,6 +278,21 @@ where
                     tokio::pin!(deadline);
                     let mut shutting_down = false;
 
+                    // Macro instead of closure: a closure would capture
+                    // `connection` and `deadline` mutably, conflicting with
+                    // the mutable borrows `tokio::select!` takes in its
+                    // branch futures.
+                    macro_rules! start_graceful_shutdown {
+                        () => {
+                            debug_assert!(!shutting_down, "graceful shutdown started twice");
+                            connection.as_mut().graceful_shutdown();
+                            shutting_down = true;
+                            deadline.as_mut().reset(
+                                Instant::now() + Duration::from_secs(GRACEFUL_CLOSE_TIMEOUT_SECS),
+                            );
+                        };
+                    }
+
                     loop {
                         tokio::select! {
                             result = &mut connection => {
@@ -299,30 +314,18 @@ where
                                     idle_connection_timeout_secs = idle_connection_timeout.as_secs(),
                                     "idle connection timeout reached; starting graceful connection shutdown"
                                 );
-                                connection.as_mut().graceful_shutdown();
-                                shutting_down = true;
-                                deadline.as_mut().reset(
-                                    Instant::now() + Duration::from_secs(GRACEFUL_CLOSE_TIMEOUT_SECS),
-                                );
+                                start_graceful_shutdown!();
                             }
                             changed = shutdown_rx.changed(), if !shutting_down => {
                                 match changed {
                                     Ok(()) => {
                                         if *shutdown_rx.borrow() {
-                                            connection.as_mut().graceful_shutdown();
-                                            shutting_down = true;
-                                            deadline.as_mut().reset(
-                                                Instant::now() + Duration::from_secs(GRACEFUL_CLOSE_TIMEOUT_SECS),
-                                            );
+                                            start_graceful_shutdown!();
                                         }
                                     }
                                     Err(error) => {
                                         warn!(%peer_addr, error = %error, "shutdown signal channel closed unexpectedly; starting graceful connection shutdown");
-                                        connection.as_mut().graceful_shutdown();
-                                        shutting_down = true;
-                                        deadline.as_mut().reset(
-                                            Instant::now() + Duration::from_secs(GRACEFUL_CLOSE_TIMEOUT_SECS),
-                                        );
+                                        start_graceful_shutdown!();
                                     }
                                 }
                             }
