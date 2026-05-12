@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 bytes = "1.8.0"
+clap = { version = "4.5.39", features = ["derive", "env"] }
 futures-util = "0.3.31"
 http-body-util = "0.1.2"
 hyper = { version = "1.6.0", features = ["http1", "server"] }
