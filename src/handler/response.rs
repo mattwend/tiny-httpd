@@ -28,6 +28,13 @@ pub(crate) struct ResponseOutcome {
 
 impl ResponseOutcome {
     /// Wraps a response with explicit body-size metadata.
+    ///
+    /// # Arguments
+    /// * `response` - Final HTTP response to return to the caller.
+    /// * `body_size` - Response body size in bytes before HEAD-body stripping.
+    ///
+    /// # Returns
+    /// A response outcome with caller-supplied body-size metadata.
     pub(crate) fn new(response: Response<ResponseBody>, body_size: u64) -> Self {
         Self {
             response,
@@ -65,17 +72,18 @@ pub(crate) async fn file_response(
         stream_body(resolved.file)
     };
 
-    Ok(ResponseOutcome::new(
-        Response::builder()
-            .status(StatusCode::OK)
-            .header(CONTENT_TYPE, content_type)
-            .header(CONTENT_LENGTH, resolved.content_length)
-            .body(body)
-            .unwrap_or_else(|error| {
-                internal_error_response("failed to build file response", error)
-            }),
-        resolved.content_length,
-    ))
+    match Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, content_type)
+        .header(CONTENT_LENGTH, resolved.content_length)
+        .body(body)
+    {
+        Ok(response) => Ok(ResponseOutcome::new(response, resolved.content_length)),
+        Err(error) => Ok(internal_error_response(
+            "failed to build file response",
+            error,
+        )),
+    }
 }
 
 /// Builds a plain-text response outcome with default text content type.
@@ -104,7 +112,6 @@ pub(crate) fn text_response_with_headers(
     body: &'static str,
     headers: &[(&'static str, &'static str)],
 ) -> ResponseOutcome {
-    let body_size = body.len() as u64;
     let mut builder = Response::builder()
         .status(status)
         .header(CONTENT_TYPE, "text/plain; charset=utf-8")
@@ -114,11 +121,10 @@ pub(crate) fn text_response_with_headers(
         builder = builder.header(*name, *value);
     }
 
-    let response = builder
-        .body(full_body(body))
-        .unwrap_or_else(|error| internal_error_response("failed to build text response", error));
-
-    ResponseOutcome::new(response, body_size)
+    match builder.body(full_body(body)) {
+        Ok(response) => ResponseOutcome::new(response, body.len() as u64),
+        Err(error) => internal_error_response("failed to build text response", error),
+    }
 }
 
 /// Boxes in-memory body bytes into shared response body type.
@@ -147,25 +153,27 @@ fn stream_body(file: File) -> ResponseBody {
 }
 
 /// Logs response-construction failure and falls back to generic `500`.
-pub(crate) fn internal_error_response<T>(context: &'static str, error: T) -> Response<ResponseBody>
+pub(crate) fn internal_error_response<T>(context: &'static str, error: T) -> ResponseOutcome
 where
     T: Display,
 {
     error!(error = %error, context, "failed to construct HTTP response");
     let body = "internal server error\n";
-    Response::builder()
+    let response = Response::builder()
         .status(StatusCode::INTERNAL_SERVER_ERROR)
         .header(CONTENT_TYPE, "text/plain; charset=utf-8")
         .header(CONTENT_LENGTH, body.len())
         .body(full_body(body))
-        .unwrap_or_else(|_| Response::new(full_body(body)))
+        .unwrap_or_else(|_| Response::new(full_body(body)));
+
+    ResponseOutcome::new(response, body.len() as u64)
 }
 
 #[cfg(test)]
 mod tests {
     use hyper::StatusCode;
 
-    use super::text_response;
+    use super::{internal_error_response, text_response};
 
     #[test]
     fn text_response_carries_explicit_body_size() {
@@ -173,5 +181,12 @@ mod tests {
         let outcome = text_response(StatusCode::OK, body);
 
         assert_eq!(outcome.body_size, body.len() as u64);
+    }
+
+    #[test]
+    fn internal_error_response_reports_fallback_body_size() {
+        let outcome = internal_error_response("test fallback", "boom");
+
+        assert_eq!(outcome.body_size, "internal server error\n".len() as u64);
     }
 }

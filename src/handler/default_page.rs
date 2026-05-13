@@ -5,28 +5,31 @@ use hyper::{
 use tracing::error;
 
 use crate::handler::response::{
-    ResponseBody, ResponseOutcome, empty_response_body, full_body, internal_error_response,
+    ResponseOutcome, empty_response_body, full_body, internal_error_response,
 };
 
 pub(crate) const DEFAULT_INDEX_HTML: &str = include_str!("../default_index.html");
 
 /// Builds response for embedded fallback index page.
-pub(crate) fn default_index_response(head_only: bool) -> Response<ResponseBody> {
+pub(crate) fn default_index_response(head_only: bool) -> ResponseOutcome {
     let body = if head_only {
         empty_response_body()
     } else {
         full_body(DEFAULT_INDEX_HTML)
     };
 
-    Response::builder()
+    match Response::builder()
         .status(StatusCode::OK)
         .header(CONTENT_TYPE, "text/html; charset=utf-8")
         .header(CONTENT_LENGTH, DEFAULT_INDEX_HTML.len())
         .body(body)
-        .unwrap_or_else(|error| {
+    {
+        Ok(response) => ResponseOutcome::new(response, DEFAULT_INDEX_HTML.len() as u64),
+        Err(error) => {
             error!(error = %error, "failed to build embedded default page response");
             internal_error_response("failed to build embedded default page response", error)
-        })
+        }
+    }
 }
 
 /// Builds response outcome for embedded fallback index page.
@@ -37,8 +40,5 @@ pub(crate) fn default_index_response(head_only: bool) -> Response<ResponseBody> 
 /// # Returns
 /// A response outcome with the embedded page response and exact body size.
 pub(crate) fn default_index_outcome(head_only: bool) -> ResponseOutcome {
-    ResponseOutcome::new(
-        default_index_response(head_only),
-        DEFAULT_INDEX_HTML.len() as u64,
-    )
+    default_index_response(head_only)
 }
