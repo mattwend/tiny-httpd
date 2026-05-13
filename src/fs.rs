@@ -7,6 +7,7 @@ use thiserror::Error;
 use tokio::fs::{self, File};
 
 /// A safely resolved file ready to be served.
+#[must_use]
 #[derive(Debug)]
 pub(crate) struct ResolvedFile {
     /// Canonical filesystem path to the resolved file.
@@ -196,5 +197,142 @@ fn hex_value(byte: u8) -> Option<u8> {
         b'a'..=b'f' => Some(byte - b'a' + 10),
         b'A'..=b'F' => Some(byte - b'A' + 10),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::{ResolveError, candidate_paths, decode_percent_path, validate_relative_path};
+
+    #[test]
+    fn candidate_paths_handles_root_and_directory_fallbacks() {
+        assert_eq!(
+            candidate_paths("/").unwrap(),
+            vec![PathBuf::from("index.html")]
+        );
+        assert_eq!(
+            candidate_paths("/docs/").unwrap(),
+            vec![PathBuf::from("docs/index.html")]
+        );
+        assert_eq!(
+            candidate_paths("/docs").unwrap(),
+            vec![PathBuf::from("docs"), PathBuf::from("docs/index.html")]
+        );
+    }
+
+    #[test]
+    fn candidate_paths_rejects_empty_bad_and_traversal_targets() {
+        assert!(matches!(candidate_paths(""), Err(ResolveError::BadTarget)));
+        assert!(matches!(
+            candidate_paths("relative"),
+            Err(ResolveError::BadTarget)
+        ));
+        assert!(matches!(
+            candidate_paths("//double"),
+            Err(ResolveError::BadTarget)
+        ));
+        assert!(matches!(
+            candidate_paths("/double//slash"),
+            Err(ResolveError::BadTarget)
+        ));
+        assert!(matches!(
+            candidate_paths("/%2f"),
+            Err(ResolveError::EncodedSlash)
+        ));
+        assert!(matches!(
+            candidate_paths("/../secret"),
+            Err(ResolveError::Traversal)
+        ));
+        assert!(matches!(
+            candidate_paths("/%2e%2e/secret"),
+            Err(ResolveError::Traversal)
+        ));
+    }
+
+    #[test]
+    fn candidate_paths_preserves_encoded_and_non_ascii_names() {
+        assert_eq!(
+            candidate_paths("/space%20name").unwrap(),
+            vec![
+                PathBuf::from("space name"),
+                PathBuf::from("space name/index.html")
+            ]
+        );
+        assert_eq!(
+            candidate_paths("/caf%C3%A9").unwrap(),
+            vec![PathBuf::from("café"), PathBuf::from("café/index.html")]
+        );
+        assert_eq!(
+            candidate_paths("/.../").unwrap(),
+            vec![PathBuf::from(".../index.html")]
+        );
+    }
+
+    #[test]
+    fn decode_percent_path_handles_valid_and_invalid_sequences() {
+        assert_eq!(
+            decode_percent_path("/hello%20world").unwrap(),
+            "/hello world"
+        );
+        assert_eq!(decode_percent_path("/caf%C3%A9").unwrap(), "/café");
+        assert!(matches!(
+            decode_percent_path("/%zz"),
+            Err(ResolveError::InvalidPercentEncoding)
+        ));
+        assert!(matches!(
+            decode_percent_path("/%"),
+            Err(ResolveError::InvalidPercentEncoding)
+        ));
+        assert!(matches!(
+            decode_percent_path("/%0"),
+            Err(ResolveError::InvalidPercentEncoding)
+        ));
+        assert!(matches!(
+            decode_percent_path("/%2F"),
+            Err(ResolveError::EncodedSlash)
+        ));
+        assert!(matches!(
+            decode_percent_path("/%00"),
+            Err(ResolveError::NullByte)
+        ));
+        assert!(matches!(
+            decode_percent_path("/foo\0bar"),
+            Err(ResolveError::NullByte)
+        ));
+        assert!(matches!(
+            decode_percent_path("/%FF"),
+            Err(ResolveError::InvalidUtf8)
+        ));
+    }
+
+    #[test]
+    fn validate_relative_path_handles_normal_and_rejected_inputs() {
+        assert!(validate_relative_path("index.html").is_ok());
+        assert!(validate_relative_path("./nested/file.txt").is_ok());
+        assert!(validate_relative_path("...").is_ok());
+        assert!(validate_relative_path(&"a".repeat(4096)).is_ok());
+        assert!(matches!(
+            validate_relative_path(".."),
+            Err(ResolveError::Traversal)
+        ));
+        assert!(matches!(
+            validate_relative_path("nested/../file.txt"),
+            Err(ResolveError::Traversal)
+        ));
+        assert!(matches!(
+            validate_relative_path("/absolute"),
+            Err(ResolveError::BadTarget)
+        ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn validate_relative_path_rejects_windows_prefixes() {
+        assert!(matches!(
+            validate_relative_path("C:\\windows"),
+            Err(ResolveError::BadTarget)
+        ));
     }
 }

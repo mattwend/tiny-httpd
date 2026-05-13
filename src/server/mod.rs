@@ -19,11 +19,18 @@ const DRAIN_TIMEOUT_SECS: u64 = 10;
 
 /// Validated startup state returned by [`startup`] and consumed by [`run`] or
 /// [`run_with_shutdown`].
+#[must_use]
 pub struct Startup {
     /// Bound TCP listener ready to accept connections.
     pub listener: TcpListener,
     /// Canonical content-root path validated during startup when available.
     pub(crate) content_root: Option<PathBuf>,
+    /// Maximum time allowed to receive complete HTTP/1 request headers.
+    pub(crate) header_read_timeout: std::time::Duration,
+    /// Maximum idle time before server closes an inactive connection.
+    pub(crate) idle_connection_timeout: std::time::Duration,
+    /// Maximum graceful-close time before a draining connection is dropped.
+    pub(crate) graceful_close_timeout: std::time::Duration,
 }
 
 impl Startup {
@@ -119,5 +126,10 @@ pub async fn startup(config: &Config) -> Result<Startup, ServerError> {
     Ok(Startup {
         listener,
         content_root,
+        header_read_timeout: std::time::Duration::from_secs(config.header_read_timeout_secs),
+        idle_connection_timeout: std::time::Duration::from_secs(
+            config.idle_connection_timeout_secs,
+        ),
+        graceful_close_timeout: std::time::Duration::from_secs(config.graceful_close_timeout_secs),
     })
 }

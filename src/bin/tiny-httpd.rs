@@ -16,7 +16,10 @@ enum MainError {
 /// Loads configuration, initializes telemetry, and runs server until shutdown.
 #[tokio::main]
 async fn main() -> Result<(), MainError> {
-    let config = Config::from_env_and_args()?;
+    // Stdout clap messages (--help, --version) are printed and the process
+    // exits cleanly, mirroring clap's own `parse()` behaviour.
+    // Printing can only fail on a broken pipe / closed fd.
+    let config = Config::load()?;
     let mut guard = telemetry::init(&config.service_name)?;
     let startup = startup(&config).await?;
 

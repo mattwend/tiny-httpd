@@ -4,19 +4,16 @@ use std::{
     time::Instant,
 };
 
-use hyper::{
-    Method, Request, Response, StatusCode,
-    header::{ALLOW, CONTENT_LENGTH},
-};
+use hyper::{Method, Request, Response, StatusCode, header::ALLOW};
 use tokio::fs;
-use tracing::{Instrument, debug, debug_span, info_span, warn};
+use tracing::{Instrument, Span, debug, debug_span, info_span, warn};
 
 use crate::{
     fs::ResolveError,
     handler::{
-        default_page::default_index_response,
+        default_page::default_index_outcome,
         response::{
-            ResponseBody, empty_response_body, file_response, text_response,
+            ResponseBody, ResponseOutcome, empty_response_body, file_response, text_response,
             text_response_with_headers,
         },
         state::AppState,
@@ -47,41 +44,19 @@ where
     let method = request.method().clone();
     let path = request.uri().path().to_string();
     let peer_addr = peer_addr.map(|addr| addr.to_string());
-    let span = if path == "/livez" || path == "/readyz" {
-        debug_span!(
-            "http.request",
-            http.request.method = %method,
-            url.path = %path,
-            network.peer.address = peer_addr.as_deref().unwrap_or(""),
-            http.response.status_code = tracing::field::Empty,
-            http.response.status_class = tracing::field::Empty,
-            http.response.body.size = tracing::field::Empty,
-            http.server.request.duration_us = tracing::field::Empty,
-        )
-    } else {
-        info_span!(
-            "http.request",
-            http.request.method = %method,
-            url.path = %path,
-            network.peer.address = peer_addr.as_deref().unwrap_or(""),
-            http.response.status_code = tracing::field::Empty,
-            http.response.status_class = tracing::field::Empty,
-            http.response.body.size = tracing::field::Empty,
-            http.server.request.duration_us = tracing::field::Empty,
-        )
-    };
+    let span = request_span(
+        &method,
+        &path,
+        peer_addr.as_deref().unwrap_or(""),
+        path == "/livez" || path == "/readyz",
+    );
 
     async move {
         let started = Instant::now();
         let mut in_flight = state.metrics().request_started();
-        let response = route(Arc::clone(&state), &method, &path).await;
-        let status = response.status().as_u16();
-        let response_body_size = response
-            .headers()
-            .get(CONTENT_LENGTH)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<u64>().ok())
-            .unwrap_or(0);
+        let outcome = route(Arc::clone(&state), &method, &path).await;
+        let status = outcome.response.status().as_u16();
+        let response_body_size = outcome.body_size;
         let elapsed = started.elapsed();
         tracing::Span::current().record("http.response.status_code", status);
         tracing::Span::current().record(
@@ -97,14 +72,14 @@ where
         state
             .metrics()
             .request_finished(method.as_str(), status, elapsed, response_body_size);
-        Ok(response)
+        Ok(outcome.response)
     }
     .instrument(span)
     .await
 }
 
 /// Routes one request path and method to probes, static files, or fallback page.
-async fn route(state: Arc<AppState>, method: &Method, path: &str) -> Response<ResponseBody> {
+async fn route(state: Arc<AppState>, method: &Method, path: &str) -> ResponseOutcome {
     if path == "/livez" {
         debug!("liveness probe handled");
         return probe_response(method == Method::HEAD, StatusCode::OK, "ok\n");
@@ -121,12 +96,12 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> Response<Re
                 }
             },
         };
-        if state.ready.load(Ordering::SeqCst) && readable {
+        if state.ready.load(Ordering::Acquire) && readable {
             debug!("readiness probe passed");
             return probe_response(method == Method::HEAD, StatusCode::OK, "ready\n");
         }
         warn!(
-            ready = state.ready.load(Ordering::SeqCst),
+            ready = state.ready.load(Ordering::Acquire),
             readable, "readiness probe failed"
         );
         return probe_response(
@@ -144,7 +119,7 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> Response<Re
         );
     }
 
-    if state.shutting_down.load(Ordering::SeqCst) {
+    if state.shutting_down.load(Ordering::Acquire) {
         debug!("rejecting non-probe request during shutdown drain");
         return text_response(StatusCode::SERVICE_UNAVAILABLE, "not ready\n");
     }
@@ -155,24 +130,52 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> Response<Re
 
     match file_response(content_root, path, method == Method::HEAD).await {
         Ok(response) => response,
-        Err(ResolveError::NotFound) if path == "/" => {
-            default_index_response(method == Method::HEAD)
-        }
+        Err(ResolveError::NotFound) if path == "/" => default_index_outcome(method == Method::HEAD),
         Err(error) => map_file_error(error),
     }
 }
 
 /// Serves embedded index for `/` when content root unavailable, else `404`.
-fn fallback_default_response(path: &str, head_only: bool) -> Response<ResponseBody> {
+fn fallback_default_response(path: &str, head_only: bool) -> ResponseOutcome {
     if path == "/" {
-        default_index_response(head_only)
+        default_index_outcome(head_only)
     } else {
         text_response(StatusCode::NOT_FOUND, "not found\n")
     }
 }
 
-/// Maps file-resolution failures into client-safe HTTP responses.
-fn map_file_error(error: ResolveError) -> Response<ResponseBody> {
+/// Builds request span with common HTTP tracing fields.
+fn request_span(method: &Method, path: &str, peer_addr: &str, debug_probe: bool) -> Span {
+    macro_rules! http_request_span {
+        ($span_macro:ident) => {
+            $span_macro!(
+                "http.request",
+                http.request.method = %method,
+                url.path = %path,
+                network.peer.address = peer_addr,
+                http.response.status_code = tracing::field::Empty,
+                http.response.status_class = tracing::field::Empty,
+                http.response.body.size = tracing::field::Empty,
+                http.server.request.duration_us = tracing::field::Empty,
+            )
+        };
+    }
+
+    if debug_probe {
+        http_request_span!(debug_span)
+    } else {
+        http_request_span!(info_span)
+    }
+}
+
+/// Maps file-resolution failures into client-safe HTTP response outcomes.
+///
+/// # Arguments
+/// * `error` - The file resolution error to map.
+///
+/// # Returns
+/// A response outcome with the appropriate HTTP status and explicit body size.
+fn map_file_error(error: ResolveError) -> ResponseOutcome {
     match error {
         ResolveError::BadTarget
         | ResolveError::InvalidPercentEncoding
@@ -189,17 +192,21 @@ fn map_file_error(error: ResolveError) -> Response<ResponseBody> {
     }
 }
 
-/// Builds liveness or readiness response, preserving `Content-Length` for `HEAD`.
-fn probe_response(
-    head_only: bool,
-    status: StatusCode,
-    body: &'static str,
-) -> Response<ResponseBody> {
-    let mut response = text_response(status, body);
+/// Builds liveness or readiness response outcome, preserving `Content-Length` for `HEAD`.
+///
+/// # Arguments
+/// * `head_only` - When `true`, omits the body while preserving headers.
+/// * `status` - HTTP status code for the probe response.
+/// * `body` - Static UTF-8 response body text.
+///
+/// # Returns
+/// A response outcome with explicit body size metadata.
+fn probe_response(head_only: bool, status: StatusCode, body: &'static str) -> ResponseOutcome {
+    let mut outcome = text_response(status, body);
     if head_only {
-        *response.body_mut() = empty_response_body();
+        *outcome.response.body_mut() = empty_response_body();
     }
-    response
+    outcome
 }
 
 #[cfg(test)]
@@ -214,25 +221,29 @@ mod tests {
 
     #[tokio::test]
     async fn io_errors_map_to_500_with_internal_error_body() {
-        let response = map_file_error(ResolveError::Io(io::Error::other("synthetic failure")));
+        let outcome = map_file_error(ResolveError::Io(io::Error::other("synthetic failure")));
 
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(outcome.body_size, 22);
+        assert_eq!(outcome.response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(
-            response
+            outcome
+                .response
                 .headers()
                 .get(hyper::header::CONTENT_TYPE)
                 .expect("content type header"),
             "text/plain; charset=utf-8"
         );
         assert_eq!(
-            response
+            outcome
+                .response
                 .headers()
                 .get(hyper::header::CONTENT_LENGTH)
                 .expect("content length header"),
             "22"
         );
 
-        let body = response
+        let body = outcome
+            .response
             .into_body()
             .collect()
             .await
@@ -243,10 +254,12 @@ mod tests {
 
     #[tokio::test]
     async fn not_found_maps_to_404() {
-        let response = map_file_error(ResolveError::NotFound);
+        let outcome = map_file_error(ResolveError::NotFound);
 
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let body = response
+        assert_eq!(outcome.body_size, 10);
+        assert_eq!(outcome.response.status(), StatusCode::NOT_FOUND);
+        let body = outcome
+            .response
             .into_body()
             .collect()
             .await
@@ -257,10 +270,12 @@ mod tests {
 
     #[tokio::test]
     async fn malformed_paths_map_to_400() {
-        let response = map_file_error(ResolveError::Traversal);
+        let outcome = map_file_error(ResolveError::Traversal);
 
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let body = response
+        assert_eq!(outcome.body_size, 12);
+        assert_eq!(outcome.response.status(), StatusCode::BAD_REQUEST);
+        let body = outcome
+            .response
             .into_body()
             .collect()
             .await
@@ -272,9 +287,9 @@ mod tests {
     #[tokio::test]
     async fn probe_responses_ignore_http_method() {
         let livez = probe_response(false, StatusCode::OK, "ok\n");
-        assert_eq!(livez.status(), StatusCode::OK);
+        assert_eq!(livez.response.status(), StatusCode::OK);
 
         let readyz = probe_response(false, StatusCode::SERVICE_UNAVAILABLE, "not ready\n");
-        assert_eq!(readyz.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(readyz.response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }

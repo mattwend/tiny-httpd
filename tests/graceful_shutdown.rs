@@ -29,6 +29,7 @@ async fn idle_keep_alive_connections_close_promptly_on_shutdown() {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: tempdir.path().to_path_buf(),
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let startup = startup(&config).await.expect("startup");
@@ -92,6 +93,139 @@ async fn idle_keep_alive_connections_close_promptly_on_shutdown() {
 }
 
 #[tokio::test]
+async fn idle_keep_alive_connections_close_promptly_after_idle_timeout() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    tokio::fs::write(tempdir.path().join("index.html"), "hello")
+        .await
+        .expect("write index");
+
+    let config = Config {
+        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
+        content_root: tempdir.path().to_path_buf(),
+        service_name: "tiny-httpd-test".to_string(),
+        idle_connection_timeout_secs: 1,
+        ..Config::default()
+    };
+
+    let startup = startup(&config).await.expect("startup");
+    let addr = startup.listener.local_addr().expect("local addr");
+
+    let (_shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let server_task = tokio::spawn(async move {
+        run_with_shutdown(startup, || async move {
+            let _ = shutdown_rx.await;
+            Ok(())
+        })
+        .await
+    });
+
+    let mut stream = TcpStream::connect(addr).await.expect("connect");
+    stream
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")
+        .await
+        .expect("write request");
+
+    let mut response = Vec::new();
+    let mut buffer = [0_u8; 1024];
+    loop {
+        let read = tokio::time::timeout(Duration::from_secs(1), stream.read(&mut buffer))
+            .await
+            .expect("response read timeout")
+            .expect("read response");
+        assert!(
+            read > 0,
+            "connection closed before first response completed"
+        );
+        response.extend_from_slice(&buffer[..read]);
+        if response.windows(5).any(|window| window == b"hello") {
+            break;
+        }
+    }
+
+    let started = Instant::now();
+    let eof = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let read = stream
+                .read(&mut buffer)
+                .await
+                .expect("read after idle timeout");
+            if read == 0 {
+                return;
+            }
+        }
+    })
+    .await;
+    assert!(
+        eof.is_ok(),
+        "idle keep-alive connection did not close promptly"
+    );
+    assert!(started.elapsed() >= Duration::from_secs(1));
+    assert!(started.elapsed() < Duration::from_secs(2));
+
+    server_task.abort();
+    let _ = server_task.await;
+}
+
+#[tokio::test]
+async fn active_keep_alive_connections_do_not_hit_idle_timeout() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    tokio::fs::write(tempdir.path().join("index.html"), "hello")
+        .await
+        .expect("write index");
+
+    let config = Config {
+        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
+        content_root: tempdir.path().to_path_buf(),
+        service_name: "tiny-httpd-test".to_string(),
+        idle_connection_timeout_secs: 1,
+        ..Config::default()
+    };
+
+    let startup = startup(&config).await.expect("startup");
+    let addr = startup.listener.local_addr().expect("local addr");
+
+    let (_shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let server_task = tokio::spawn(async move {
+        run_with_shutdown(startup, || async move {
+            let _ = shutdown_rx.await;
+            Ok(())
+        })
+        .await
+    });
+
+    let mut stream = TcpStream::connect(addr).await.expect("connect");
+    let mut buffer = [0_u8; 1024];
+
+    for _ in 0..3 {
+        stream
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")
+            .await
+            .expect("write request");
+
+        let mut response = Vec::new();
+        loop {
+            let read = tokio::time::timeout(Duration::from_secs(1), stream.read(&mut buffer))
+                .await
+                .expect("response read timeout")
+                .expect("read response");
+            assert!(read > 0, "connection closed unexpectedly while active");
+            response.extend_from_slice(&buffer[..read]);
+            if response.windows(5).any(|window| window == b"hello") {
+                break;
+            }
+        }
+
+        let response = String::from_utf8_lossy(&response);
+        assert!(response.contains("HTTP/1.1 200 OK"));
+
+        tokio::time::sleep(Duration::from_millis(700)).await;
+    }
+
+    server_task.abort();
+    let _ = server_task.await;
+}
+
+#[tokio::test]
 async fn shutdown_after_completed_request_still_drains_promptly() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     tokio::fs::write(tempdir.path().join("index.html"), "hello")
@@ -102,6 +236,7 @@ async fn shutdown_after_completed_request_still_drains_promptly() {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: tempdir.path().to_path_buf(),
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let startup = startup(&config).await.expect("startup");
@@ -144,6 +279,7 @@ async fn graceful_shutdown_keeps_liveness_ok_while_readiness_fails_during_drain_
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: tempdir.path().to_path_buf(),
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let startup = startup(&config).await.expect("startup");
@@ -199,6 +335,7 @@ async fn shutdown_flips_probe_states_before_listener_stops_accepting() {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: tempdir.path().to_path_buf(),
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let startup = startup(&config).await.expect("startup");
@@ -292,6 +429,7 @@ async fn graceful_shutdown_stops_accepting_promptly_without_new_connections() {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: tempdir.path().to_path_buf(),
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let startup = startup(&config).await.expect("startup");
@@ -326,6 +464,7 @@ async fn server_serves_http_requests_before_shutdown() {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: tempdir.path().to_path_buf(),
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let startup = startup(&config).await.expect("startup");

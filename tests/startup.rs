@@ -13,6 +13,7 @@ async fn startup_succeeds_when_content_root_is_missing() {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: missing,
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let startup = startup(&config)
@@ -30,6 +31,7 @@ async fn startup_fails_when_content_root_is_not_a_directory() {
         listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
         content_root: file.clone(),
         service_name: "tiny-httpd-test".to_string(),
+        ..Config::default()
     };
 
     let error = startup(&config)

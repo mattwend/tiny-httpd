@@ -33,12 +33,16 @@ impl AppState {
 
     /// Marks the application as not ready.
     pub(crate) fn mark_not_ready(&self) {
-        self.ready.store(false, Ordering::SeqCst);
+        // Release pairs with Acquire loads in request routing so probe and
+        // shutdown handlers observe readiness transition after shutdown starts.
+        self.ready.store(false, Ordering::Release);
     }
 
     /// Marks the application as draining for graceful shutdown.
     pub(crate) fn mark_shutting_down(&self) {
-        self.shutting_down.store(true, Ordering::SeqCst);
+        // Release pairs with Acquire loads in request routing so non-probe
+        // requests observe shutdown state once drain begins.
+        self.shutting_down.store(true, Ordering::Release);
     }
 
     /// Returns shared HTTP metrics recorder.

@@ -20,6 +20,15 @@ Runtime behavior reference for operators deploying and monitoring tiny-httpd.
 
 Probe routes (`/livez`, `/readyz`) take precedence over static files.
 
+### Connection timeouts
+
+- HTTP/1 request headers must arrive within the configured header-read timeout
+  (default: `30s`). Slow header trickles are disconnected.
+- Open connections may remain idle only up to the configured idle-connection
+  timeout (default: `60s`). This bounds keep-alive idle resource usage.
+- Once a connection starts graceful shutdown, it gets the configured
+  graceful-close timeout (default: `5s`) before the server drops it.
+
 ### Response headers
 
 Successful file responses include `Content-Type` (derived from file extension
@@ -69,9 +78,14 @@ On `SIGTERM`:
 1. Readiness flips to `503`; non-probe requests are rejected with `503`.
 2. Listener stays open for a **250 ms** readiness drain window so Kubernetes
    can observe the `503` from `/readyz` before the socket closes.
-3. Listener closes; in-flight requests drain up to a **10 s** hard timeout.
-4. Remaining connections are aborted after timeout.
-5. `/livez` stays `200` until process exit.
+3. Listener closes. Existing connections, including any accepted during the
+   drain window, receive graceful-shutdown signaling after accepts stop.
+   Each connection then gets up to the configured graceful-close timeout
+   (default: **5 s**) to finish cleanly.
+4. The server waits up to a **10 s** process-level drain timeout for all
+   connection tasks to finish.
+5. Remaining connections are aborted after timeout.
+6. `/livez` stays `200` until process exit.
 
 This gives Kubernetes a readiness-failure signal before the listener closes.
 Achieving zero-downtime rollouts also depends on probe frequency,
