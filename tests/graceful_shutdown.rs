@@ -7,15 +7,21 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
-use tiny_httpd::{Config, run_with_shutdown, startup};
+use tiny_httpd::run_with_shutdown;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
+    net::{TcpListener, TcpStream},
     sync::oneshot,
 };
 
 fn client() -> Client<HttpConnector, Empty<Bytes>> {
     Client::builder(TokioExecutor::new()).build_http()
+}
+
+async fn bind_listener() -> TcpListener {
+    TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener")
 }
 
 #[tokio::test]
@@ -25,22 +31,23 @@ async fn idle_keep_alive_connections_close_promptly_on_shutdown() {
         .await
         .expect("write index");
 
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: tempdir.path().to_path_buf(),
-        service_name: "tiny-httpd-test".to_string(),
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let addr = startup.listener.local_addr().expect("local addr");
+    let listener = bind_listener().await;
+    let addr = listener.local_addr().expect("local addr");
+    let content_root = Some(tempdir.path().to_path_buf());
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_task = tokio::spawn(async move {
-        run_with_shutdown(startup, || async move {
-            let _ = shutdown_rx.await;
-            Ok(())
-        })
+        run_with_shutdown(
+            listener,
+            content_root,
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(5),
+            || async move {
+                let _ = shutdown_rx.await;
+                Ok(())
+            },
+        )
         .await
     });
 
@@ -99,23 +106,23 @@ async fn idle_keep_alive_connections_close_promptly_after_idle_timeout() {
         .await
         .expect("write index");
 
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: tempdir.path().to_path_buf(),
-        service_name: "tiny-httpd-test".to_string(),
-        idle_connection_timeout_secs: 1,
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let addr = startup.listener.local_addr().expect("local addr");
+    let listener = bind_listener().await;
+    let addr = listener.local_addr().expect("local addr");
+    let content_root = Some(tempdir.path().to_path_buf());
 
     let (_shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_task = tokio::spawn(async move {
-        run_with_shutdown(startup, || async move {
-            let _ = shutdown_rx.await;
-            Ok(())
-        })
+        run_with_shutdown(
+            listener,
+            content_root,
+            Duration::from_secs(30),
+            Duration::from_secs(1),
+            Duration::from_secs(5),
+            || async move {
+                let _ = shutdown_rx.await;
+                Ok(())
+            },
+        )
         .await
     });
 
@@ -173,23 +180,23 @@ async fn active_keep_alive_connections_do_not_hit_idle_timeout() {
         .await
         .expect("write index");
 
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: tempdir.path().to_path_buf(),
-        service_name: "tiny-httpd-test".to_string(),
-        idle_connection_timeout_secs: 1,
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let addr = startup.listener.local_addr().expect("local addr");
+    let listener = bind_listener().await;
+    let addr = listener.local_addr().expect("local addr");
+    let content_root = Some(tempdir.path().to_path_buf());
 
     let (_shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_task = tokio::spawn(async move {
-        run_with_shutdown(startup, || async move {
-            let _ = shutdown_rx.await;
-            Ok(())
-        })
+        run_with_shutdown(
+            listener,
+            content_root,
+            Duration::from_secs(30),
+            Duration::from_secs(1),
+            Duration::from_secs(5),
+            || async move {
+                let _ = shutdown_rx.await;
+                Ok(())
+            },
+        )
         .await
     });
 
@@ -232,22 +239,23 @@ async fn shutdown_after_completed_request_still_drains_promptly() {
         .await
         .expect("write index");
 
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: tempdir.path().to_path_buf(),
-        service_name: "tiny-httpd-test".to_string(),
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let addr = startup.listener.local_addr().expect("local addr");
+    let listener = bind_listener().await;
+    let addr = listener.local_addr().expect("local addr");
+    let content_root = Some(tempdir.path().to_path_buf());
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_task = tokio::spawn(async move {
-        run_with_shutdown(startup, || async move {
-            let _ = shutdown_rx.await;
-            Ok(())
-        })
+        run_with_shutdown(
+            listener,
+            content_root,
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(5),
+            || async move {
+                let _ = shutdown_rx.await;
+                Ok(())
+            },
+        )
         .await
     });
 
@@ -275,22 +283,23 @@ async fn graceful_shutdown_keeps_liveness_ok_while_readiness_fails_during_drain_
         .await
         .expect("write index");
 
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: tempdir.path().to_path_buf(),
-        service_name: "tiny-httpd-test".to_string(),
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let addr = startup.listener.local_addr().expect("local addr");
+    let listener = bind_listener().await;
+    let addr = listener.local_addr().expect("local addr");
+    let content_root = Some(tempdir.path().to_path_buf());
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_task = tokio::spawn(async move {
-        run_with_shutdown(startup, || async move {
-            let _ = shutdown_rx.await;
-            Ok(())
-        })
+        run_with_shutdown(
+            listener,
+            content_root,
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(5),
+            || async move {
+                let _ = shutdown_rx.await;
+                Ok(())
+            },
+        )
         .await
     });
 
@@ -331,22 +340,23 @@ async fn shutdown_flips_probe_states_before_listener_stops_accepting() {
         .await
         .expect("write index");
 
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: tempdir.path().to_path_buf(),
-        service_name: "tiny-httpd-test".to_string(),
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let addr = startup.listener.local_addr().expect("local addr");
+    let listener = bind_listener().await;
+    let addr = listener.local_addr().expect("local addr");
+    let content_root = Some(tempdir.path().to_path_buf());
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_task = tokio::spawn(async move {
-        run_with_shutdown(startup, || async move {
-            let _ = shutdown_rx.await;
-            Ok(())
-        })
+        run_with_shutdown(
+            listener,
+            content_root,
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(5),
+            || async move {
+                let _ = shutdown_rx.await;
+                Ok(())
+            },
+        )
         .await
     });
 
@@ -425,22 +435,22 @@ async fn graceful_shutdown_stops_accepting_promptly_without_new_connections() {
         .await
         .expect("write index");
 
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: tempdir.path().to_path_buf(),
-        service_name: "tiny-httpd-test".to_string(),
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let _addr = startup.listener.local_addr().expect("local addr");
+    let listener = bind_listener().await;
+    let content_root = Some(tempdir.path().to_path_buf());
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_task = tokio::spawn(async move {
-        run_with_shutdown(startup, || async move {
-            let _ = shutdown_rx.await;
-            Ok(())
-        })
+        run_with_shutdown(
+            listener,
+            content_root,
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(5),
+            || async move {
+                let _ = shutdown_rx.await;
+                Ok(())
+            },
+        )
         .await
     });
 
@@ -460,22 +470,23 @@ async fn server_serves_http_requests_before_shutdown() {
         .await
         .expect("write index");
 
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: tempdir.path().to_path_buf(),
-        service_name: "tiny-httpd-test".to_string(),
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let addr = startup.listener.local_addr().expect("local addr");
+    let listener = bind_listener().await;
+    let addr = listener.local_addr().expect("local addr");
+    let content_root = Some(tempdir.path().to_path_buf());
 
     let (_shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_task = tokio::spawn(async move {
-        run_with_shutdown(startup, || async move {
-            let _ = shutdown_rx.await;
-            Ok(())
-        })
+        run_with_shutdown(
+            listener,
+            content_root,
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(5),
+            || async move {
+                let _ = shutdown_rx.await;
+                Ok(())
+            },
+        )
         .await
     });
 

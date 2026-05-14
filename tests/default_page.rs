@@ -5,9 +5,9 @@ use hyper::{
     Method, StatusCode,
     header::{CONTENT_LENGTH, CONTENT_TYPE},
 };
+use tokio::net::TcpListener;
 
 use common::TestServer;
-use tiny_httpd::{Config, startup};
 
 #[tokio::test]
 async fn empty_content_root_dir_serves_default_page_at_root() {
@@ -49,17 +49,17 @@ async fn empty_content_root_dir_returns_404_for_other_paths() {
 
 #[tokio::test]
 async fn missing_content_root_starts_and_serves_default_page() {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let missing = tempdir.path().join("missing");
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: missing,
-        service_name: "tiny-httpd-test".to_string(),
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let server = TestServer::spawn_with_startup(startup).await;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let server = TestServer::spawn_with_params(
+        listener,
+        None,
+        std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(60),
+        std::time::Duration::from_secs(5),
+    )
+    .await;
 
     let response = server.request(Method::GET, "/").await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -77,17 +77,17 @@ async fn missing_content_root_starts_and_serves_default_page() {
 
 #[tokio::test]
 async fn missing_content_root_returns_404_for_other_paths() {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let missing = tempdir.path().join("missing");
-    let config = Config {
-        listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-        content_root: missing,
-        service_name: "tiny-httpd-test".to_string(),
-        ..Config::default()
-    };
-
-    let startup = startup(&config).await.expect("startup");
-    let server = TestServer::spawn_with_startup(startup).await;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let server = TestServer::spawn_with_params(
+        listener,
+        None,
+        std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(60),
+        std::time::Duration::from_secs(5),
+    )
+    .await;
 
     let response = server.request(Method::GET, "/other").await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);

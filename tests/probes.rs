@@ -112,9 +112,17 @@ async fn probe_routes_accept_non_get_methods() {
 
 #[tokio::test]
 async fn readyz_returns_200_when_content_root_missing_at_startup() {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let missing = tempdir.path().join("missing");
-    let server = TestServer::spawn(missing).await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let server = TestServer::spawn_with_params(
+        listener,
+        None,
+        std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(60),
+        std::time::Duration::from_secs(5),
+    )
+    .await;
 
     let ready = server.request(Method::GET, "/readyz").await;
     assert_eq!(ready.status(), StatusCode::OK);

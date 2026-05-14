@@ -5,8 +5,8 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
-use tiny_httpd::{Config, Startup, run_with_shutdown, startup};
-use tokio::{sync::oneshot, task::JoinHandle};
+use tiny_httpd::run_with_shutdown;
+use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
 
 pub fn client() -> Client<HttpConnector, Empty<Bytes>> {
     Client::builder(TokioExecutor::new()).build_http()
@@ -20,25 +20,40 @@ pub struct TestServer {
 
 impl TestServer {
     pub async fn spawn(content_root: std::path::PathBuf) -> Self {
-        let config = Config {
-            listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-            content_root,
-            service_name: "tiny-httpd-test".to_string(),
-            ..Config::default()
-        };
-
-        let startup: Startup = startup(&config).await.expect("startup");
-        Self::spawn_with_startup(startup).await
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        Self::spawn_with_params(
+            listener,
+            Some(content_root),
+            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(60),
+            std::time::Duration::from_secs(5),
+        )
+        .await
     }
 
-    pub async fn spawn_with_startup(startup: Startup) -> Self {
-        let addr = startup.listener.local_addr().expect("local addr");
+    pub async fn spawn_with_params(
+        listener: TcpListener,
+        content_root: Option<std::path::PathBuf>,
+        header_read_timeout: std::time::Duration,
+        idle_connection_timeout: std::time::Duration,
+        graceful_close_timeout: std::time::Duration,
+    ) -> Self {
+        let addr = listener.local_addr().expect("local addr");
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let task = tokio::spawn(async move {
-            run_with_shutdown(startup, || async move {
-                let _ = shutdown_rx.await;
-                Ok(())
-            })
+            run_with_shutdown(
+                listener,
+                content_root,
+                header_read_timeout,
+                idle_connection_timeout,
+                graceful_close_timeout,
+                || async move {
+                    let _ = shutdown_rx.await;
+                    Ok(())
+                },
+            )
             .await
         });
 
