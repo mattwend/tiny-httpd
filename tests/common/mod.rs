@@ -7,6 +7,7 @@ use hyper_util::{
 };
 use tiny_httpd::run_with_shutdown;
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
+use tracing::warn;
 
 pub const TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS: u64 = 30;
 pub const TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
@@ -108,9 +109,9 @@ impl TestServer {
 impl Drop for TestServer {
     fn drop(&mut self) {
         if self.shutdown_tx.is_some() {
-            eprintln!(
-                "TestServer at {} dropped without shutdown(); aborting server task",
-                self.addr
+            warn!(
+                address = %self.addr,
+                "TestServer dropped without shutdown(); aborting server task"
             );
             if let Some(task) = self.task.take() {
                 task.abort();
