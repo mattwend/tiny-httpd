@@ -1,6 +1,5 @@
 use std::{
     io::ErrorKind,
-    net::SocketAddr,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -25,7 +24,7 @@ const DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
 struct Config {
     /// Bind address.
     #[arg(long, env = "TINY_HTTPD_LISTEN_ADDR", default_value = DEFAULT_LISTEN_ADDR)]
-    listen_addr: SocketAddr,
+    listen_addr: String,
     /// Static content root.
     #[arg(long, env = "TINY_HTTPD_CONTENT_ROOT", default_value = DEFAULT_CONTENT_ROOT)]
     content_root: PathBuf,
@@ -97,8 +96,8 @@ enum StartupError {
     /// TCP listener bind failed for configured address.
     #[error("failed to bind listener on `{addr}`: {source}")]
     Bind {
-        /// Socket address server attempted to bind.
-        addr: SocketAddr,
+        /// Address (host:port) server attempted to bind.
+        addr: String,
         /// OS error returned by bind operation.
         #[source]
         source: std::io::Error,
