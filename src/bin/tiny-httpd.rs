@@ -1,12 +1,12 @@
 use std::{
     io::ErrorKind,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::PathBuf,
+    net::SocketAddr,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
 use clap::Parser;
-use telemetry_setup::{TelemetryBuilder, TelemetryError, TelemetryGuard};
+use telemetry_setup::{TelemetryBuilder, TelemetryError};
 use thiserror::Error;
 use tiny_httpd::{ServerError, run_with_shutdown};
 use tokio::net::TcpListener;
@@ -18,14 +18,6 @@ const DEFAULT_SERVICE_NAME: &str = "tiny-httpd";
 const DEFAULT_HEADER_READ_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
 const DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
-
-/// Errors produced while parsing runtime configuration.
-#[derive(Debug, Error)]
-enum ConfigError {
-    /// Clap reported parsing, validation, help, or version output.
-    #[error(transparent)]
-    Clap(#[from] clap::Error),
-}
 
 /// Runtime configuration for the HTTP server.
 #[derive(Debug, Clone, Parser)]
@@ -64,57 +56,6 @@ struct Config {
         value_parser = clap::value_parser!(u64).range(1..),
     )]
     graceful_close_timeout_secs: u64,
-}
-
-impl Config {
-    /// Parses configuration from CLI arguments and environment variables.
-    ///
-    /// # Returns
-    /// Parsed [`Config`] values.
-    ///
-    /// # Errors
-    /// Returns [`ConfigError`] when clap reports parsing, validation, help, or
-    /// version output.
-    fn parse() -> Result<Self, ConfigError> {
-        <Self as Parser>::try_parse().map_err(Into::into)
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080),
-            content_root: PathBuf::from(DEFAULT_CONTENT_ROOT),
-            service_name: DEFAULT_SERVICE_NAME.to_string(),
-            header_read_timeout_secs: DEFAULT_HEADER_READ_TIMEOUT_SECS,
-            idle_connection_timeout_secs: DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS,
-            graceful_close_timeout_secs: DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
-        }
-    }
-}
-
-/// Errors returned by the telemetry adapter.
-#[derive(Debug, Error)]
-enum TelemetryInitError {
-    /// Shared telemetry setup crate failed during initialization.
-    #[error("failed to initialize telemetry: {0}")]
-    Init(#[from] TelemetryError),
-}
-
-/// Initializes process telemetry through the shared `telemetry-setup` crate.
-///
-/// # Arguments
-/// * `service_name` - OpenTelemetry service name for this process.
-///
-/// # Returns
-/// A telemetry guard that must stay alive until process shutdown.
-///
-/// # Errors
-/// Returns [`TelemetryInitError`] when the shared telemetry setup fails.
-fn init_telemetry(service_name: &str) -> Result<TelemetryGuard, TelemetryInitError> {
-    TelemetryBuilder::new(service_name)
-        .init()
-        .map_err(Into::into)
 }
 
 /// Waits for process shutdown signal.
@@ -177,16 +118,18 @@ enum StartupError {
 /// Returns [`StartupError::ContentRootNotDirectory`] when the path exists but is
 /// not a directory, or [`StartupError::ContentRootCanonicalize`] when
 /// canonicalization fails after a successful directory metadata check.
-async fn prepare_content_root(content_root: &PathBuf) -> Result<Option<PathBuf>, StartupError> {
+async fn prepare_content_root(content_root: &Path) -> Result<Option<PathBuf>, StartupError> {
     match tokio::fs::metadata(content_root).await {
         Ok(metadata) => {
             if !metadata.is_dir() {
-                return Err(StartupError::ContentRootNotDirectory(content_root.clone()));
+                return Err(StartupError::ContentRootNotDirectory(
+                    content_root.to_path_buf(),
+                ));
             }
 
             Ok(Some(tokio::fs::canonicalize(content_root).await.map_err(
                 |source| StartupError::ContentRootCanonicalize {
-                    path: content_root.clone(),
+                    path: content_root.to_path_buf(),
                     source,
                 },
             )?))
@@ -209,32 +152,11 @@ async fn prepare_content_root(content_root: &PathBuf) -> Result<Option<PathBuf>,
     }
 }
 
-/// Binds the server TCP listener.
-///
-/// # Arguments
-/// * `listen_addr` - Socket address the server should bind.
-///
-/// # Returns
-/// A bound [`TcpListener`] ready to accept connections.
-///
-/// # Errors
-/// Returns [`StartupError::Bind`] when the operating system refuses the bind.
-async fn bind_listener(listen_addr: SocketAddr) -> Result<TcpListener, StartupError> {
-    TcpListener::bind(listen_addr)
-        .await
-        .map_err(|source| StartupError::Bind {
-            addr: listen_addr,
-            source,
-        })
-}
-
 /// Top-level application errors.
 #[derive(Debug, Error)]
 enum MainError {
     #[error(transparent)]
-    Config(#[from] ConfigError),
-    #[error(transparent)]
-    Telemetry(#[from] TelemetryInitError),
+    Telemetry(#[from] TelemetryError),
     #[error(transparent)]
     Startup(#[from] StartupError),
     #[error(transparent)]
@@ -244,12 +166,17 @@ enum MainError {
 /// Loads configuration, initializes telemetry, and runs server until shutdown.
 #[tokio::main]
 async fn main() -> Result<(), MainError> {
-    let config = Config::parse()?;
-    let mut guard = init_telemetry(&config.service_name)?;
+    let config = Config::parse();
+    let mut telemetry_guard = TelemetryBuilder::new(&config.service_name).init()?;
     let content_root = prepare_content_root(&config.content_root).await?;
-    let listener = bind_listener(config.listen_addr).await?;
+    let listener = TcpListener::bind(&config.listen_addr)
+        .await
+        .map_err(|source| StartupError::Bind {
+            addr: config.listen_addr,
+            source,
+        })?;
 
-    if let Err(error) = run_with_shutdown(
+    let result = run_with_shutdown(
         listener,
         content_root,
         Duration::from_secs(config.header_read_timeout_secs),
@@ -257,17 +184,15 @@ async fn main() -> Result<(), MainError> {
         Duration::from_secs(config.graceful_close_timeout_secs),
         shutdown_signal,
     )
-    .await
-    {
+    .await;
+
+    if let Err(error) = &result {
         error!(%error, "server exited with error");
-        if let Err(shutdown_error) = guard.shutdown().await {
-            warn!(%shutdown_error, "telemetry shutdown failed");
-        }
-        return Err(error.into());
     }
 
-    if let Err(shutdown_error) = guard.shutdown().await {
+    if let Err(shutdown_error) = telemetry_guard.shutdown().await {
         warn!(%shutdown_error, "telemetry shutdown failed");
     }
-    Ok(())
+
+    result.map_err(Into::into)
 }
