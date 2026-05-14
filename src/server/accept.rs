@@ -1,5 +1,6 @@
 use std::{
     net::SocketAddr,
+    path::PathBuf,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -23,7 +24,7 @@ use tracing::{error, info, warn};
 
 use crate::{
     handler::{AppState, handle_with_peer_addr},
-    server::{DRAIN_TIMEOUT_SECS, ServerError, Startup},
+    server::{DRAIN_TIMEOUT_SECS, ServerError},
 };
 
 /// Time to keep listener accepting only readiness observations after shutdown starts.
@@ -120,49 +121,53 @@ where
     }
 }
 
-/// Runs the Hyper accept loop until a shutdown signal is received.
+/// Runs the server with an injectable shutdown future for tests or binaries.
 ///
 /// # Arguments
-/// * `startup` - Validated startup resources.
-///
-/// # Returns
-/// `Ok(())` after accepting stops and tracked connections have drained or timed out.
-///
-/// # Errors
-/// Returns [`ServerError`] for startup state inspection failures before entering
-/// the accept loop. Transient listener accept failures during serving are logged
-/// and the server continues accepting subsequent connections.
-pub async fn run(startup: Startup) -> Result<(), ServerError> {
-    run_with_shutdown(startup, super::signal::shutdown_signal).await
-}
-
-/// Runs the server with an injectable shutdown future for tests.
-///
-/// # Arguments
-/// * `startup` - Validated startup resources.
+/// * `listener` - Bound TCP listener to accept connections from.
+/// * `content_root` - Canonical static content root when one is available.
+/// * `header_read_timeout` - Maximum time allowed to receive complete HTTP/1 request headers.
+/// * `idle_connection_timeout` - Maximum idle time allowed for one open connection.
+/// * `graceful_close_timeout` - Maximum graceful-close time for one draining connection.
 /// * `shutdown` - Factory producing a future that resolves when shutdown begins.
 ///
 /// # Returns
-/// `Ok(())` after accepting stops and tracked connections have drained or timed out.
+/// `Ok(())` after the accept loop stops and tracked connections have drained.
 ///
 /// # Errors
-/// Returns [`ServerError`] for startup state inspection failures before entering
-/// the accept loop. Transient listener accept failures during serving are logged
-/// and the server continues accepting subsequent connections.
-pub async fn run_with_shutdown<F, Fut>(startup: Startup, shutdown: F) -> Result<(), ServerError>
+/// Returns [`ServerError`] for listener-local-address lookup before the accept
+/// loop begins. Transient listener accept failures while serving are logged and
+/// do not stop the server.
+///
+/// # Notes
+/// This implementation manually coordinates per-connection graceful shutdown so
+/// in-flight requests can complete while idle keep-alive connections are asked
+/// to close promptly. On shutdown, readiness is flipped before the accept loop
+/// exits, and the listener remains open for a short bounded drain window so a
+/// final readiness probe can observe `503 Service Unavailable` before new
+/// accepts stop. A fixed drain timeout remains a hard upper bound for stuck
+/// connections, after which remaining tasks are aborted.
+pub async fn run_with_shutdown<F, Fut>(
+    listener: TcpListener,
+    content_root: Option<PathBuf>,
+    header_read_timeout: Duration,
+    idle_connection_timeout: Duration,
+    graceful_close_timeout: Duration,
+    shutdown: F,
+) -> Result<(), ServerError>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), std::io::Error>>,
 {
-    let local_addr = startup.listener.local_addr()?;
-    let state = Arc::new(AppState::new(startup.content_root));
+    let local_addr = listener.local_addr()?;
+    let state = Arc::new(AppState::new(content_root));
     run_with_state(
-        startup.listener,
+        listener,
         state,
         local_addr,
-        startup.header_read_timeout,
-        startup.idle_connection_timeout,
-        startup.graceful_close_timeout,
+        header_read_timeout,
+        idle_connection_timeout,
+        graceful_close_timeout,
         shutdown,
     )
     .await
@@ -186,15 +191,6 @@ where
 /// Returns [`ServerError`] for listener-local-address lookup before the accept
 /// loop begins. Transient listener accept failures while serving are logged and
 /// do not stop the server.
-///
-/// # Notes
-/// This implementation manually coordinates per-connection graceful shutdown so
-/// in-flight requests can complete while idle keep-alive connections are asked
-/// to close promptly. On shutdown, readiness is flipped before the accept loop
-/// exits, and the listener remains open for a short bounded drain window so a
-/// final readiness probe can observe `503 Service Unavailable` before new
-/// accepts stop. A fixed drain timeout remains a hard upper bound for stuck
-/// connections, after which remaining tasks are aborted.
 pub(crate) async fn run_with_state<F, Fut>(
     listener: TcpListener,
     state: Arc<AppState>,
@@ -239,10 +235,6 @@ where
                     drain_window_ms = READINESS_DRAIN_WINDOW_MILLIS,
                     "shutdown requested; continuing to serve readiness responses before stopping accepts"
                 );
-                // Existing and newly accepted connections keep running during the
-                // readiness drain window. Shutdown signaling starts after the
-                // window expires so readiness probes can still observe the open
-                // listener before accepts stop.
             }
             () = async {
                 if let Some(deadline) = shutdown_deadline.as_mut() {
@@ -277,10 +269,6 @@ where
                     tokio::pin!(deadline);
                     let mut shutting_down = false;
 
-                    // Macro instead of closure: a closure would capture
-                    // `connection` and `deadline` mutably, conflicting with
-                    // the mutable borrows `tokio::select!` takes in its
-                    // branch futures.
                     macro_rules! start_graceful_shutdown {
                         () => {
                             debug_assert!(!shutting_down, "graceful shutdown started twice");
