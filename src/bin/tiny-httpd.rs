@@ -138,6 +138,32 @@ async fn shutdown_signal() -> Result<(), std::io::Error> {
     }
 }
 
+/// Errors returned during binary startup orchestration.
+#[derive(Debug, Error)]
+enum StartupError {
+    /// Configured content root exists but is not a directory.
+    #[error("content root `{0}` is not a directory")]
+    ContentRootNotDirectory(PathBuf),
+    /// Canonicalization of configured content root failed.
+    #[error("failed to canonicalize content root `{path}`: {source}")]
+    ContentRootCanonicalize {
+        /// Original configured content-root path.
+        path: PathBuf,
+        /// Filesystem error from canonicalization.
+        #[source]
+        source: std::io::Error,
+    },
+    /// TCP listener bind failed for configured address.
+    #[error("failed to bind listener on `{addr}`: {source}")]
+    Bind {
+        /// Socket address server attempted to bind.
+        addr: SocketAddr,
+        /// OS error returned by bind operation.
+        #[source]
+        source: std::io::Error,
+    },
+}
+
 /// Validates the content root and canonicalizes it when available.
 ///
 /// # Arguments
@@ -148,18 +174,18 @@ async fn shutdown_signal() -> Result<(), std::io::Error> {
 /// otherwise `None` when the path is missing or unavailable.
 ///
 /// # Errors
-/// Returns [`ServerError::ContentRootNotDirectory`] when the path exists but is
-/// not a directory, or [`ServerError::ContentRootCanonicalize`] when
+/// Returns [`StartupError::ContentRootNotDirectory`] when the path exists but is
+/// not a directory, or [`StartupError::ContentRootCanonicalize`] when
 /// canonicalization fails after a successful directory metadata check.
-async fn prepare_content_root(content_root: &PathBuf) -> Result<Option<PathBuf>, ServerError> {
+async fn prepare_content_root(content_root: &PathBuf) -> Result<Option<PathBuf>, StartupError> {
     match tokio::fs::metadata(content_root).await {
         Ok(metadata) => {
             if !metadata.is_dir() {
-                return Err(ServerError::ContentRootNotDirectory(content_root.clone()));
+                return Err(StartupError::ContentRootNotDirectory(content_root.clone()));
             }
 
             Ok(Some(tokio::fs::canonicalize(content_root).await.map_err(
-                |source| ServerError::ContentRootCanonicalize {
+                |source| StartupError::ContentRootCanonicalize {
                     path: content_root.clone(),
                     source,
                 },
@@ -192,11 +218,11 @@ async fn prepare_content_root(content_root: &PathBuf) -> Result<Option<PathBuf>,
 /// A bound [`TcpListener`] ready to accept connections.
 ///
 /// # Errors
-/// Returns [`ServerError::Bind`] when the operating system refuses the bind.
-async fn bind_listener(listen_addr: SocketAddr) -> Result<TcpListener, ServerError> {
+/// Returns [`StartupError::Bind`] when the operating system refuses the bind.
+async fn bind_listener(listen_addr: SocketAddr) -> Result<TcpListener, StartupError> {
     TcpListener::bind(listen_addr)
         .await
-        .map_err(|source| ServerError::Bind {
+        .map_err(|source| StartupError::Bind {
             addr: listen_addr,
             source,
         })
@@ -209,6 +235,8 @@ enum MainError {
     Config(#[from] ConfigError),
     #[error(transparent)]
     Telemetry(#[from] TelemetryInitError),
+    #[error(transparent)]
+    Startup(#[from] StartupError),
     #[error(transparent)]
     Server(#[from] ServerError),
 }
