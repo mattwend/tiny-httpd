@@ -2,6 +2,7 @@ mod common;
 
 use http_body_util::BodyExt;
 use hyper::{Method, StatusCode, header::CONTENT_TYPE};
+use tiny_httpd::DEFAULT_DRAIN_TIMEOUT_SECS;
 
 use common::TestServer;
 
@@ -121,6 +122,7 @@ async fn readyz_returns_200_when_content_root_missing_at_startup() {
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(60),
         std::time::Duration::from_secs(5),
+        std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
     )
     .await;
 

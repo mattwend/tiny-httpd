@@ -8,7 +8,7 @@ use std::{
 use clap::Parser;
 use telemetry_setup::{TelemetryBuilder, TelemetryError};
 use thiserror::Error;
-use tiny_httpd::{ServerError, run_with_shutdown};
+use tiny_httpd::{DEFAULT_DRAIN_TIMEOUT_SECS, ServerError, run_with_shutdown};
 use tokio::net::TcpListener;
 use tracing::{error, warn};
 
@@ -61,6 +61,14 @@ struct Config {
         value_parser = clap::value_parser!(u64).range(1..),
     )]
     graceful_close_timeout_secs: u64,
+    /// Maximum process-level drain time (seconds) before remaining connections are aborted.
+    #[arg(
+        long,
+        env = "TINY_HTTPD_DRAIN_TIMEOUT_SECS",
+        default_value_t = DEFAULT_DRAIN_TIMEOUT_SECS,
+        value_parser = clap::value_parser!(u64).range(1..),
+    )]
+    drain_timeout_secs: u64,
 }
 
 /// Parses and validates a listen address accepted by the CLI.
@@ -231,6 +239,7 @@ async fn main() -> Result<(), MainError> {
         Duration::from_secs(config.header_read_timeout_secs),
         Duration::from_secs(config.idle_connection_timeout_secs),
         Duration::from_secs(config.graceful_close_timeout_secs),
+        Duration::from_secs(config.drain_timeout_secs),
         shutdown_signal,
     )
     .await;

@@ -8,6 +8,8 @@ use hyper_util::{
 use tiny_httpd::run_with_shutdown;
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
 
+pub const TEST_DEFAULT_DRAIN_TIMEOUT_SECS: u64 = 10;
+
 pub fn client() -> Client<HttpConnector, Empty<Bytes>> {
     Client::builder(TokioExecutor::new()).build_http()
 }
@@ -29,6 +31,7 @@ impl TestServer {
             std::time::Duration::from_secs(30),
             std::time::Duration::from_secs(60),
             std::time::Duration::from_secs(5),
+            std::time::Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
         )
         .await
     }
@@ -39,6 +42,7 @@ impl TestServer {
         header_read_timeout: std::time::Duration,
         idle_connection_timeout: std::time::Duration,
         graceful_close_timeout: std::time::Duration,
+        drain_timeout: std::time::Duration,
     ) -> Self {
         let addr = listener.local_addr().expect("local addr");
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -49,6 +53,7 @@ impl TestServer {
                 header_read_timeout,
                 idle_connection_timeout,
                 graceful_close_timeout,
+                drain_timeout,
                 || async move {
                     let _ = shutdown_rx.await;
                     Ok(())

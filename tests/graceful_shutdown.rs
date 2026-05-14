@@ -1,3 +1,5 @@
+mod common;
+
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
@@ -13,6 +15,8 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::oneshot,
 };
+
+use common::TEST_DEFAULT_DRAIN_TIMEOUT_SECS;
 
 fn client() -> Client<HttpConnector, Empty<Bytes>> {
     Client::builder(TokioExecutor::new()).build_http()
@@ -43,6 +47,7 @@ async fn idle_keep_alive_connections_close_promptly_on_shutdown() {
             Duration::from_secs(30),
             Duration::from_secs(60),
             Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
                 Ok(())
@@ -118,6 +123,7 @@ async fn idle_keep_alive_connections_close_promptly_after_idle_timeout() {
             Duration::from_secs(30),
             Duration::from_secs(1),
             Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
                 Ok(())
@@ -192,6 +198,7 @@ async fn active_keep_alive_connections_do_not_hit_idle_timeout() {
             Duration::from_secs(30),
             Duration::from_secs(1),
             Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
                 Ok(())
@@ -251,6 +258,7 @@ async fn shutdown_after_completed_request_still_drains_promptly() {
             Duration::from_secs(30),
             Duration::from_secs(60),
             Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
                 Ok(())
@@ -295,6 +303,7 @@ async fn graceful_shutdown_keeps_liveness_ok_while_readiness_fails_during_drain_
             Duration::from_secs(30),
             Duration::from_secs(60),
             Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
                 Ok(())
@@ -352,6 +361,7 @@ async fn shutdown_flips_probe_states_before_listener_stops_accepting() {
             Duration::from_secs(30),
             Duration::from_secs(60),
             Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
                 Ok(())
@@ -446,6 +456,7 @@ async fn graceful_shutdown_stops_accepting_promptly_without_new_connections() {
             Duration::from_secs(30),
             Duration::from_secs(60),
             Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
                 Ok(())
@@ -482,6 +493,7 @@ async fn server_serves_http_requests_before_shutdown() {
             Duration::from_secs(30),
             Duration::from_secs(60),
             Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
                 Ok(())

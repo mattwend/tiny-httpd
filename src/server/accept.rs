@@ -15,10 +15,11 @@ use tracing::{error, info, warn};
 
 use crate::{
     handler::{AppState, handle_with_peer_addr},
-    server::{
-        DRAIN_TIMEOUT_SECS, READINESS_DRAIN_WINDOW_MILLIS, ServerError, activity_io::ActivityIo,
-    },
+    server::{ServerError, activity_io::ActivityIo},
 };
+
+/// Time to keep listener accepting only readiness observations after shutdown starts.
+const READINESS_DRAIN_WINDOW_MILLIS: u64 = 250;
 
 /// Runs the server with an injectable shutdown future for tests or binaries.
 ///
@@ -28,6 +29,7 @@ use crate::{
 /// * `header_read_timeout` - Maximum time allowed to receive complete HTTP/1 request headers.
 /// * `idle_connection_timeout` - Maximum idle time allowed for one open connection.
 /// * `graceful_close_timeout` - Maximum graceful-close time for one draining connection.
+/// * `drain_timeout` - Maximum process-level time to wait for all draining connections.
 /// * `shutdown` - Factory producing a future that resolves when shutdown begins.
 ///
 /// # Returns
@@ -44,14 +46,15 @@ use crate::{
 /// to close promptly. On shutdown, readiness is flipped before the accept loop
 /// exits, and the listener remains open for a short bounded drain window so a
 /// final readiness probe can observe `503 Service Unavailable` before new
-/// accepts stop. A fixed drain timeout remains a hard upper bound for stuck
-/// connections, after which remaining tasks are aborted.
+/// accepts stop. The process-level drain timeout remains a hard upper bound
+/// for stuck connections, after which remaining tasks are aborted.
 pub async fn run_with_shutdown<F, Fut>(
     listener: TcpListener,
     content_root: Option<PathBuf>,
     header_read_timeout: Duration,
     idle_connection_timeout: Duration,
     graceful_close_timeout: Duration,
+    drain_timeout: Duration,
     shutdown: F,
 ) -> Result<(), ServerError>
 where
@@ -73,6 +76,7 @@ where
         header_read_timeout_secs = header_read_timeout.as_secs(),
         idle_connection_timeout_secs = idle_connection_timeout.as_secs(),
         graceful_close_timeout_secs = graceful_close_timeout.as_secs(),
+        drain_timeout_secs = drain_timeout.as_secs(),
         "tiny-httpd listening"
     );
 
@@ -129,16 +133,11 @@ where
 
     let _ = shutdown_tx.send(true);
 
-    match timeout(
-        Duration::from_secs(DRAIN_TIMEOUT_SECS),
-        drain_connections(&mut connections),
-    )
-    .await
-    {
+    match timeout(drain_timeout, drain_connections(&mut connections)).await {
         Ok(()) => info!("all connections drained gracefully"),
         Err(_) => {
             warn!(
-                timeout_secs = DRAIN_TIMEOUT_SECS,
+                timeout_secs = drain_timeout.as_secs(),
                 "connection drain timed out; aborting remaining tasks"
             );
             connections.abort_all();

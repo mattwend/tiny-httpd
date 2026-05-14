@@ -5,6 +5,7 @@ use hyper::{
     Method, StatusCode,
     header::{CONTENT_LENGTH, CONTENT_TYPE},
 };
+use tiny_httpd::DEFAULT_DRAIN_TIMEOUT_SECS;
 use tokio::net::TcpListener;
 
 use common::TestServer;
@@ -58,6 +59,7 @@ async fn missing_content_root_starts_and_serves_default_page() {
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(60),
         std::time::Duration::from_secs(5),
+        std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
     )
     .await;
 
@@ -86,6 +88,7 @@ async fn missing_content_root_returns_404_for_other_paths() {
         std::time::Duration::from_secs(30),
         std::time::Duration::from_secs(60),
         std::time::Duration::from_secs(5),
+        std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
     )
     .await;
 
