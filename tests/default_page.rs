@@ -8,7 +8,10 @@ use hyper::{
 use tiny_httpd::DEFAULT_DRAIN_TIMEOUT_SECS;
 use tokio::net::TcpListener;
 
-use common::TestServer;
+use common::{
+    TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS, TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS,
+    TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS, TestServer,
+};
 
 #[tokio::test]
 async fn empty_content_root_dir_serves_default_page_at_root() {
@@ -56,9 +59,9 @@ async fn missing_content_root_starts_and_serves_default_page() {
     let server = TestServer::spawn_with_params(
         listener,
         None,
-        std::time::Duration::from_secs(30),
-        std::time::Duration::from_secs(60),
-        std::time::Duration::from_secs(5),
+        std::time::Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+        std::time::Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
+        std::time::Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
         std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
     )
     .await;
@@ -85,9 +88,9 @@ async fn missing_content_root_returns_404_for_other_paths() {
     let server = TestServer::spawn_with_params(
         listener,
         None,
-        std::time::Duration::from_secs(30),
-        std::time::Duration::from_secs(60),
-        std::time::Duration::from_secs(5),
+        std::time::Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+        std::time::Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
+        std::time::Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
         std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
     )
     .await;

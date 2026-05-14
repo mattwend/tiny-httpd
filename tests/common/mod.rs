@@ -8,6 +8,9 @@ use hyper_util::{
 use tiny_httpd::run_with_shutdown;
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
 
+pub const TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS: u64 = 30;
+pub const TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
+pub const TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
 pub const TEST_DEFAULT_DRAIN_TIMEOUT_SECS: u64 = 10;
 
 pub fn client() -> Client<HttpConnector, Empty<Bytes>> {
@@ -28,9 +31,9 @@ impl TestServer {
         Self::spawn_with_params(
             listener,
             Some(content_root),
-            std::time::Duration::from_secs(30),
-            std::time::Duration::from_secs(60),
-            std::time::Duration::from_secs(5),
+            std::time::Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+            std::time::Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
+            std::time::Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
             std::time::Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
         )
         .await

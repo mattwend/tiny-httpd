@@ -16,7 +16,10 @@ use tokio::{
     sync::oneshot,
 };
 
-use common::TEST_DEFAULT_DRAIN_TIMEOUT_SECS;
+use common::{
+    TEST_DEFAULT_DRAIN_TIMEOUT_SECS, TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
+    TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS, TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS,
+};
 
 fn client() -> Client<HttpConnector, Empty<Bytes>> {
     Client::builder(TokioExecutor::new()).build_http()
@@ -44,9 +47,9 @@ async fn idle_keep_alive_connections_close_promptly_on_shutdown() {
         run_with_shutdown(
             listener,
             content_root,
-            Duration::from_secs(30),
-            Duration::from_secs(60),
-            Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
             Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
@@ -120,9 +123,9 @@ async fn idle_keep_alive_connections_close_promptly_after_idle_timeout() {
         run_with_shutdown(
             listener,
             content_root,
-            Duration::from_secs(30),
+            Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
             Duration::from_secs(1),
-            Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
             Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
@@ -195,9 +198,9 @@ async fn active_keep_alive_connections_do_not_hit_idle_timeout() {
         run_with_shutdown(
             listener,
             content_root,
-            Duration::from_secs(30),
+            Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
             Duration::from_secs(1),
-            Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
             Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
@@ -255,9 +258,9 @@ async fn shutdown_after_completed_request_still_drains_promptly() {
         run_with_shutdown(
             listener,
             content_root,
-            Duration::from_secs(30),
-            Duration::from_secs(60),
-            Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
             Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
@@ -300,9 +303,9 @@ async fn graceful_shutdown_keeps_liveness_ok_while_readiness_fails_during_drain_
         run_with_shutdown(
             listener,
             content_root,
-            Duration::from_secs(30),
-            Duration::from_secs(60),
-            Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
             Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
@@ -358,9 +361,9 @@ async fn shutdown_flips_probe_states_before_listener_stops_accepting() {
         run_with_shutdown(
             listener,
             content_root,
-            Duration::from_secs(30),
-            Duration::from_secs(60),
-            Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
             Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
@@ -453,9 +456,9 @@ async fn graceful_shutdown_stops_accepting_promptly_without_new_connections() {
         run_with_shutdown(
             listener,
             content_root,
-            Duration::from_secs(30),
-            Duration::from_secs(60),
-            Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
             Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
@@ -490,9 +493,9 @@ async fn server_serves_http_requests_before_shutdown() {
         run_with_shutdown(
             listener,
             content_root,
-            Duration::from_secs(30),
-            Duration::from_secs(60),
-            Duration::from_secs(5),
+            Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
+            Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
             Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
             || async move {
                 let _ = shutdown_rx.await;
