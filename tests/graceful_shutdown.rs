@@ -2,6 +2,7 @@ mod common;
 
 use std::time::{Duration, Instant};
 
+use http_body_util::BodyExt;
 use hyper::{Method, StatusCode};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -292,8 +293,21 @@ async fn graceful_shutdown_stops_accepting_promptly_without_new_connections() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
     let mut server = spawn_server(tempdir.path().to_path_buf()).await;
+    let addr = server_addr(&server);
 
+    let started = Instant::now();
     server.shutdown().await;
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "shutdown without active connections should complete well under 500 ms, took {:?}",
+        started.elapsed()
+    );
+
+    let refused = TcpStream::connect(addr).await;
+    assert!(
+        refused.is_err(),
+        "listener should stop accepting after shutdown"
+    );
 }
 
 #[tokio::test]
@@ -309,12 +323,26 @@ async fn server_serves_http_requests_before_shutdown() {
         .await
         .expect("readyz before shutdown");
     assert_eq!(readyz.status(), StatusCode::OK);
+    let readyz_body = readyz
+        .into_body()
+        .collect()
+        .await
+        .expect("readyz body")
+        .to_bytes();
+    assert_eq!(&readyz_body[..], b"ready\n");
 
     let root = client
         .get(server.uri("/").parse().expect("uri"))
         .await
         .expect("root before shutdown");
     assert_eq!(root.status(), StatusCode::OK);
+    let root_body = root
+        .into_body()
+        .collect()
+        .await
+        .expect("root body")
+        .to_bytes();
+    assert_eq!(&root_body[..], b"hello");
 
     server.shutdown().await;
 }
