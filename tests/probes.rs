@@ -19,7 +19,7 @@ async fn livez_and_readyz_have_reserved_precedence_and_plain_text_content_type()
         .await
         .expect("write readyz file");
 
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let livez = server.request(Method::GET, "/livez").await;
     assert_eq!(livez.status(), StatusCode::OK);
@@ -61,7 +61,7 @@ async fn livez_and_readyz_have_reserved_precedence_and_plain_text_content_type()
 #[tokio::test]
 async fn head_probes_return_success_with_empty_body() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let livez = server.request(Method::HEAD, "/livez").await;
     assert_eq!(livez.status(), StatusCode::OK);
@@ -89,7 +89,7 @@ async fn head_probes_return_success_with_empty_body() {
 #[tokio::test]
 async fn probe_routes_accept_non_get_methods() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::POST, "/livez").await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -119,7 +119,7 @@ async fn readyz_returns_200_when_content_root_missing_at_startup() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind listener");
-    let server = TestServer::spawn_with_params(
+    let mut server = TestServer::spawn_with_params(
         listener,
         ServerParams {
             content_root: None,
@@ -156,7 +156,7 @@ async fn readyz_returns_503_after_content_root_loss() {
     let root = tempdir.path().join("public");
     tokio::fs::create_dir(&root).await.expect("create root");
 
-    let server = TestServer::spawn(root.clone()).await;
+    let mut server = TestServer::spawn(root.clone()).await;
 
     let ready = server.request(Method::GET, "/readyz").await;
     assert_eq!(ready.status(), StatusCode::OK);

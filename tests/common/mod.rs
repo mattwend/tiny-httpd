@@ -90,21 +90,20 @@ impl TestServer {
             .expect("http response")
     }
 
-    pub async fn shutdown(mut self) {
+    pub async fn shutdown(&mut self) {
         self.trigger_shutdown();
         self.wait().await;
     }
 
     /// Waits for the server task to finish after shutdown has been triggered.
-    pub async fn wait(mut self) {
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            self.task.take().expect("server task handle"),
-        )
-        .await
-        .expect("server task should exit promptly")
-        .expect("join server task");
-        result.expect("server result");
+    pub async fn wait(&mut self) {
+        if let Some(task) = self.task.take() {
+            let result = tokio::time::timeout(std::time::Duration::from_secs(2), task)
+                .await
+                .expect("server task should exit promptly")
+                .expect("join server task");
+            result.expect("server result");
+        }
     }
 }
 

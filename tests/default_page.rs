@@ -16,7 +16,7 @@ use common::{
 #[tokio::test]
 async fn empty_content_root_dir_serves_default_page_at_root() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::GET, "/").await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -43,7 +43,7 @@ async fn empty_content_root_dir_serves_default_page_at_root() {
 #[tokio::test]
 async fn empty_content_root_dir_returns_404_for_other_paths() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::GET, "/other").await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -56,7 +56,7 @@ async fn missing_content_root_starts_and_serves_default_page() {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind listener");
-    let server = TestServer::spawn_with_params(
+    let mut server = TestServer::spawn_with_params(
         listener,
         ServerParams {
             content_root: None,
@@ -93,7 +93,7 @@ async fn missing_content_root_returns_404_for_other_paths() {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind listener");
-    let server = TestServer::spawn_with_params(
+    let mut server = TestServer::spawn_with_params(
         listener,
         ServerParams {
             content_root: None,
@@ -123,7 +123,7 @@ async fn user_index_takes_precedence_over_default_page() {
     tokio::fs::write(tempdir.path().join("index.html"), "user content")
         .await
         .expect("write index");
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::GET, "/").await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -141,7 +141,7 @@ async fn user_index_takes_precedence_over_default_page() {
 #[tokio::test]
 async fn head_default_page_returns_headers_with_empty_body() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::HEAD, "/").await;
     assert_eq!(response.status(), StatusCode::OK);

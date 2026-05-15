@@ -14,7 +14,7 @@ async fn successful_file_responses_set_content_type_and_content_length() {
         .await
         .expect("write index");
 
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::GET, "/").await;
 

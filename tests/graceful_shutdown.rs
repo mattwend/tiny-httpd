@@ -114,7 +114,7 @@ async fn idle_keep_alive_connections_close_promptly_on_shutdown() {
 async fn idle_keep_alive_connections_close_promptly_after_idle_timeout() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let server =
+    let mut server =
         spawn_server_with_idle_timeout(tempdir.path().to_path_buf(), Duration::from_secs(1)).await;
 
     let mut stream = TcpStream::connect(server_addr(&server))
@@ -155,7 +155,7 @@ async fn idle_keep_alive_connections_close_promptly_after_idle_timeout() {
 async fn active_keep_alive_connections_do_not_hit_idle_timeout() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let server =
+    let mut server =
         spawn_server_with_idle_timeout(tempdir.path().to_path_buf(), Duration::from_secs(1)).await;
 
     let mut stream = TcpStream::connect(server_addr(&server))
@@ -183,7 +183,7 @@ async fn active_keep_alive_connections_do_not_hit_idle_timeout() {
 async fn shutdown_after_completed_request_still_drains_promptly() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let server = spawn_server(tempdir.path().to_path_buf()).await;
+    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::GET, "/").await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -296,7 +296,7 @@ async fn shutdown_flips_probe_states_before_listener_stops_accepting() {
 async fn graceful_shutdown_stops_accepting_promptly_without_new_connections() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let server = spawn_server(tempdir.path().to_path_buf()).await;
+    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
 
     server.shutdown().await;
 }
@@ -305,7 +305,7 @@ async fn graceful_shutdown_stops_accepting_promptly_without_new_connections() {
 async fn server_serves_http_requests_before_shutdown() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let server = spawn_server(tempdir.path().to_path_buf()).await;
+    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
 
     let client = client();
 
