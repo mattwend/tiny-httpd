@@ -77,6 +77,13 @@ impl TestServer {
         format!("http://{}{}", self.addr, path)
     }
 
+    /// Sends the shutdown signal without waiting for the server task to exit.
+    pub fn trigger_shutdown(&mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+    }
+
     pub async fn request(&self, method: Method, path: &str) -> Response<hyper::body::Incoming> {
         client()
             .request(
@@ -91,10 +98,12 @@ impl TestServer {
     }
 
     pub async fn shutdown(mut self) {
-        if let Some(shutdown_tx) = self.shutdown_tx.take() {
-            let _ = shutdown_tx.send(());
-        }
+        self.trigger_shutdown();
+        self.wait().await;
+    }
 
+    /// Waits for the server task to finish after shutdown has been triggered.
+    pub async fn wait(mut self) {
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(2),
             self.task.take().expect("server task handle"),
@@ -108,11 +117,18 @@ impl TestServer {
 
 impl Drop for TestServer {
     fn drop(&mut self) {
-        if self.shutdown_tx.is_some() {
-            warn!(
-                address = %self.addr,
-                "TestServer dropped without shutdown(); aborting server task"
-            );
+        if self.task.is_some() {
+            if self.shutdown_tx.is_some() {
+                warn!(
+                    address = %self.addr,
+                    "TestServer dropped without shutdown(); aborting server task"
+                );
+            } else {
+                warn!(
+                    address = %self.addr,
+                    "TestServer dropped after shutdown signal without wait(); aborting server task"
+                );
+            }
             if let Some(task) = self.task.take() {
                 task.abort();
             }
