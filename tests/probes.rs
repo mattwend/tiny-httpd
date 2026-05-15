@@ -2,12 +2,9 @@ mod common;
 
 use http_body_util::BodyExt;
 use hyper::{Method, StatusCode, header::CONTENT_TYPE};
-use tiny_httpd::{DEFAULT_DRAIN_TIMEOUT_SECS, ServerParams};
+use tiny_httpd::ServerParams;
 
-use common::{
-    TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS, TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS,
-    TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS, TestServer,
-};
+use common::TestServer;
 
 #[tokio::test]
 async fn livez_and_readyz_have_reserved_precedence_and_plain_text_content_type() {
@@ -123,16 +120,7 @@ async fn readyz_returns_200_when_content_root_missing_at_startup() {
         listener,
         ServerParams {
             content_root: None,
-            header_read_timeout: std::time::Duration::from_secs(
-                TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS,
-            ),
-            idle_connection_timeout: std::time::Duration::from_secs(
-                TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS,
-            ),
-            graceful_close_timeout: std::time::Duration::from_secs(
-                TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
-            ),
-            drain_timeout: std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
+            ..ServerParams::default()
         },
     )
     .await;

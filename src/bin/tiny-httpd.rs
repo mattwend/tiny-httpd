@@ -8,7 +8,7 @@ use std::{
 use clap::Parser;
 use telemetry_setup::{TelemetryBuilder, TelemetryError};
 use thiserror::Error;
-use tiny_httpd::{DEFAULT_DRAIN_TIMEOUT_SECS, ServerParams, run_with_shutdown};
+use tiny_httpd::{ServerParams, run_with_shutdown};
 use tokio::net::TcpListener;
 use tracing::{error, warn};
 
@@ -18,6 +18,7 @@ const DEFAULT_SERVICE_NAME: &str = "tiny-httpd";
 const DEFAULT_HEADER_READ_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
 const DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
+const DEFAULT_DRAIN_TIMEOUT_SECS: u64 = 10;
 
 /// Runtime configuration for the HTTP server.
 #[derive(Debug, Clone, Parser)]

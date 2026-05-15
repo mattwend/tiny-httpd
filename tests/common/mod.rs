@@ -9,11 +9,6 @@ use tiny_httpd::{ServerParams, run_with_shutdown};
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
 use tracing::warn;
 
-pub const TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS: u64 = 30;
-pub const TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
-pub const TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
-pub const TEST_DEFAULT_DRAIN_TIMEOUT_SECS: u64 = 10;
-
 pub fn client() -> Client<HttpConnector, Empty<Bytes>> {
     Client::builder(TokioExecutor::new()).build_http()
 }
@@ -33,16 +28,7 @@ impl TestServer {
             listener,
             ServerParams {
                 content_root: Some(content_root),
-                header_read_timeout: std::time::Duration::from_secs(
-                    TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS,
-                ),
-                idle_connection_timeout: std::time::Duration::from_secs(
-                    TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS,
-                ),
-                graceful_close_timeout: std::time::Duration::from_secs(
-                    TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
-                ),
-                drain_timeout: std::time::Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
+                ..ServerParams::default()
             },
         )
         .await

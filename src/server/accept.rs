@@ -36,6 +36,18 @@ pub struct ServerParams {
     pub drain_timeout: Duration,
 }
 
+impl Default for ServerParams {
+    fn default() -> Self {
+        Self {
+            content_root: None,
+            header_read_timeout: Duration::from_secs(30),
+            idle_connection_timeout: Duration::from_secs(60),
+            graceful_close_timeout: Duration::from_secs(5),
+            drain_timeout: Duration::from_secs(10),
+        }
+    }
+}
+
 /// Runs the server with an injectable shutdown future for tests or binaries.
 ///
 /// # Arguments
