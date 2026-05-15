@@ -128,3 +128,27 @@ pub(crate) fn status_class(status: u16) -> &'static str {
         _ => "other",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{HttpMetrics, status_class};
+
+    #[test]
+    fn status_class_covers_all_ranges_and_other_values() {
+        assert_eq!(status_class(100), "1xx");
+        assert_eq!(status_class(204), "2xx");
+        assert_eq!(status_class(302), "3xx");
+        assert_eq!(status_class(404), "4xx");
+        assert_eq!(status_class(503), "5xx");
+        assert_eq!(status_class(99), "other");
+        assert_eq!(status_class(600), "other");
+    }
+
+    #[test]
+    fn in_flight_guard_finish_is_idempotent() {
+        let metrics = HttpMetrics::new();
+        let mut guard = metrics.request_started();
+        guard.finish();
+        guard.finish();
+    }
+}

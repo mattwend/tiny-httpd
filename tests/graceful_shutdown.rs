@@ -218,6 +218,31 @@ async fn graceful_shutdown_keeps_liveness_ok_while_readiness_fails_during_drain_
 }
 
 #[tokio::test]
+async fn graceful_shutdown_rejects_non_probe_requests_during_drain_window() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    write_index(&tempdir).await;
+    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
+
+    server.trigger_shutdown();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let response = client()
+        .get(server.uri("/").parse().expect("uri"))
+        .await
+        .expect("fresh root connection during shutdown drain window");
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("shutdown body")
+        .to_bytes();
+    assert_eq!(&body[..], b"not ready\n");
+
+    server.wait().await;
+}
+
+#[tokio::test]
 async fn shutdown_flips_probe_states_before_listener_stops_accepting() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;

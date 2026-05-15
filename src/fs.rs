@@ -205,7 +205,11 @@ fn hex_value(byte: u8) -> Option<u8> {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{ResolveError, candidate_paths, decode_percent_path, validate_relative_path};
+    use tempfile::tempdir;
+
+    use super::{
+        ResolveError, candidate_paths, decode_percent_path, resolve_file, validate_relative_path,
+    };
 
     #[test]
     fn candidate_paths_handles_root_and_directory_fallbacks() {
@@ -335,5 +339,45 @@ mod tests {
             validate_relative_path("C:\\windows"),
             Err(ResolveError::BadTarget)
         ));
+    }
+
+    #[tokio::test]
+    async fn resolve_file_rejects_non_file_root_target() {
+        let root = tempdir().expect("tempdir");
+        let canonical_root = tokio::fs::canonicalize(root.path())
+            .await
+            .expect("canonicalize root");
+
+        let error = resolve_file(&canonical_root, "/")
+            .await
+            .expect_err("directory target should not resolve to file");
+        assert!(matches!(error, ResolveError::NotFound));
+    }
+
+    #[tokio::test]
+    async fn resolve_file_opens_regular_files_and_reports_metadata() {
+        let root = tempdir().expect("tempdir");
+        let file_path = root.path().join("hello.txt");
+        tokio::fs::write(&file_path, b"hello world")
+            .await
+            .expect("write file");
+        let canonical_root = tokio::fs::canonicalize(root.path())
+            .await
+            .expect("canonicalize root");
+
+        let resolved = resolve_file(&canonical_root, "/hello.txt")
+            .await
+            .expect("resolve file");
+
+        assert_eq!(resolved.content_length, 11);
+        assert_eq!(resolved.canonical_path, canonical_root.join("hello.txt"));
+
+        let body = tokio::fs::read_to_string(resolved.canonical_path)
+            .await
+            .expect("read file back");
+        assert_eq!(body, "hello world");
+
+        let metadata = resolved.file.metadata().await.expect("file metadata");
+        assert!(metadata.is_file());
     }
 }

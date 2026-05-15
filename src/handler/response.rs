@@ -171,9 +171,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use hyper::StatusCode;
+    use http_body_util::BodyExt;
+    use hyper::{
+        StatusCode,
+        header::{CONTENT_LENGTH, CONTENT_TYPE},
+    };
 
-    use super::{internal_error_response, text_response};
+    use super::{internal_error_response, text_response, text_response_with_headers};
 
     #[test]
     fn text_response_carries_explicit_body_size() {
@@ -188,5 +192,46 @@ mod tests {
         let outcome = internal_error_response("test fallback", "boom");
 
         assert_eq!(outcome.body_size, "internal server error\n".len() as u64);
+    }
+
+    #[tokio::test]
+    async fn text_response_with_headers_appends_extra_headers() {
+        let outcome = text_response_with_headers(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "method not allowed\n",
+            &[("allow", "GET, HEAD"), ("x-test", "value")],
+        );
+
+        assert_eq!(outcome.body_size, "method not allowed\n".len() as u64);
+        assert_eq!(outcome.response.status(), StatusCode::METHOD_NOT_ALLOWED);
+        assert_eq!(
+            outcome.response.headers().get(CONTENT_TYPE),
+            Some(
+                &"text/plain; charset=utf-8"
+                    .parse()
+                    .expect("content-type value")
+            )
+        );
+        assert_eq!(
+            outcome.response.headers().get(CONTENT_LENGTH),
+            Some(&"19".parse().expect("content-length value"))
+        );
+        assert_eq!(
+            outcome.response.headers().get("allow"),
+            Some(&"GET, HEAD".parse().expect("allow value"))
+        );
+        assert_eq!(
+            outcome.response.headers().get("x-test"),
+            Some(&"value".parse().expect("x-test value"))
+        );
+
+        let body = outcome
+            .response
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        assert_eq!(&body[..], b"method not allowed\n");
     }
 }
