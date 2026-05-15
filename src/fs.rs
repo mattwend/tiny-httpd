@@ -121,9 +121,10 @@ pub(crate) async fn resolve_file(
 
         // There is a theoretical TOCTOU window between canonicalize and
         // open: an attacker with write access to the content root could
-        // replace the file with a symlink between the two calls.  This is
-        // accepted because the server is designed to run in a minimal
-        // container where the content root is read-only.
+        // replace the file with a symlink between the two calls. This is
+        // accepted because the server is designed to run from an immutable,
+        // read-only container image where the content root cannot be
+        // mutated at runtime.
         if !canonical.starts_with(content_root) {
             return Err(ResolveError::Escape);
         }

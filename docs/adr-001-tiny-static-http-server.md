@@ -106,7 +106,8 @@ All file lookups canonicalize paths and verify they remain inside the content
 root before opening. Symlinks are followed only when their canonical target
 stays within bounds. Files are opened shortly after canonicalization; a
 residual resolve/open TOCTOU window remains, but this is accepted because the
-content root is expected to be read-only at runtime.
+server is designed to run from an immutable, read-only container image where
+the content root cannot be mutated at runtime.
 
 ### Graceful shutdown
 
