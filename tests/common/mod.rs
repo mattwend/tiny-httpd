@@ -5,8 +5,9 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
-use tiny_httpd::{Config, Startup, run_with_shutdown, startup};
-use tokio::{sync::oneshot, task::JoinHandle};
+use tiny_httpd::{ServerParams, run_with_shutdown};
+use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
+use tracing::warn;
 
 pub fn client() -> Client<HttpConnector, Empty<Bytes>> {
     Client::builder(TokioExecutor::new()).build_http()
@@ -15,27 +16,29 @@ pub fn client() -> Client<HttpConnector, Empty<Bytes>> {
 pub struct TestServer {
     addr: std::net::SocketAddr,
     shutdown_tx: Option<oneshot::Sender<()>>,
-    task: Option<JoinHandle<Result<(), tiny_httpd::ServerError>>>,
+    task: Option<JoinHandle<Result<(), std::io::Error>>>,
 }
 
 impl TestServer {
     pub async fn spawn(content_root: std::path::PathBuf) -> Self {
-        let config = Config {
-            listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
-            content_root,
-            service_name: "tiny-httpd-test".to_string(),
-            ..Config::default()
-        };
-
-        let startup: Startup = startup(&config).await.expect("startup");
-        Self::spawn_with_startup(startup).await
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        Self::spawn_with_params(
+            listener,
+            ServerParams {
+                content_root: Some(content_root),
+                ..ServerParams::default()
+            },
+        )
+        .await
     }
 
-    pub async fn spawn_with_startup(startup: Startup) -> Self {
-        let addr = startup.listener.local_addr().expect("local addr");
+    pub async fn spawn_with_params(listener: TcpListener, params: ServerParams) -> Self {
+        let addr = listener.local_addr().expect("local addr");
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let task = tokio::spawn(async move {
-            run_with_shutdown(startup, || async move {
+            run_with_shutdown(listener, params, || async move {
                 let _ = shutdown_rx.await;
                 Ok(())
             })
@@ -53,6 +56,13 @@ impl TestServer {
         format!("http://{}{}", self.addr, path)
     }
 
+    /// Sends the shutdown signal without waiting for the server task to exit.
+    pub fn trigger_shutdown(&mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+    }
+
     pub async fn request(&self, method: Method, path: &str) -> Response<hyper::body::Incoming> {
         client()
             .request(
@@ -66,29 +76,37 @@ impl TestServer {
             .expect("http response")
     }
 
-    pub async fn shutdown(mut self) {
-        if let Some(shutdown_tx) = self.shutdown_tx.take() {
-            let _ = shutdown_tx.send(());
-        }
+    pub async fn shutdown(&mut self) {
+        self.trigger_shutdown();
+        self.wait().await;
+    }
 
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            self.task.take().expect("server task handle"),
-        )
-        .await
-        .expect("server task should exit promptly")
-        .expect("join server task");
-        result.expect("server result");
+    /// Waits for the server task to finish after shutdown has been triggered.
+    pub async fn wait(&mut self) {
+        if let Some(task) = self.task.take() {
+            let result = tokio::time::timeout(std::time::Duration::from_secs(2), task)
+                .await
+                .expect("server task should exit promptly")
+                .expect("join server task");
+            result.expect("server result");
+        }
     }
 }
 
 impl Drop for TestServer {
     fn drop(&mut self) {
-        if self.shutdown_tx.is_some() {
-            eprintln!(
-                "TestServer at {} dropped without shutdown(); aborting server task",
-                self.addr
-            );
+        if self.task.is_some() {
+            if self.shutdown_tx.is_some() {
+                warn!(
+                    address = %self.addr,
+                    "TestServer dropped without shutdown(); aborting server task"
+                );
+            } else {
+                warn!(
+                    address = %self.addr,
+                    "TestServer dropped after shutdown signal without wait(); aborting server task"
+                );
+            }
             if let Some(task) = self.task.take() {
                 task.abort();
             }

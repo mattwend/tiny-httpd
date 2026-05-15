@@ -18,7 +18,7 @@ async fn resolves_root_dir_and_dir_slash_to_index() {
         .await
         .expect("write docs index");
 
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let root = server.request(Method::GET, "/").await;
     assert_eq!(root.status(), StatusCode::OK);
@@ -60,7 +60,7 @@ async fn explicit_file_paths_resolve_directly() {
         .await
         .expect("write foo.html");
 
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let file = server.request(Method::GET, "/foo.html").await;
     assert_eq!(file.status(), StatusCode::OK);
@@ -91,7 +91,7 @@ async fn file_then_directory_index_fallback_matches_rfc() {
         .await
         .expect("write other index");
 
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let docs = server.request(Method::GET, "/docs").await;
     assert_eq!(docs.status(), StatusCode::OK);
@@ -105,7 +105,7 @@ async fn file_then_directory_index_fallback_matches_rfc() {
 #[tokio::test]
 async fn missing_files_return_404() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::GET, "/missing").await;
 

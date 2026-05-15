@@ -7,7 +7,7 @@ use common::TestServer;
 #[tokio::test]
 async fn invalid_percent_encoding_and_traversal_return_400() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let invalid = server.request(Method::GET, "/%zz").await;
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
@@ -35,7 +35,7 @@ async fn symlink_escape_is_rejected() {
         .expect("write outside");
     symlink(&outside, root.join("escape.txt")).expect("symlink");
 
-    let server = TestServer::spawn(root).await;
+    let mut server = TestServer::spawn(root).await;
     let response = server.request(Method::GET, "/escape.txt").await;
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -54,7 +54,7 @@ async fn missing_direct_file_falls_back_to_directory_index() {
         .await
         .expect("write docs index");
 
-    let server = TestServer::spawn(root.to_path_buf()).await;
+    let mut server = TestServer::spawn(root.to_path_buf()).await;
     let response = server.request(Method::GET, "/docs").await;
 
     assert_eq!(response.status(), StatusCode::OK);

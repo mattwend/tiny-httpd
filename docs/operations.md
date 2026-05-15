@@ -82,8 +82,8 @@ On `SIGTERM`:
    drain window, receive graceful-shutdown signaling after accepts stop.
    Each connection then gets up to the configured graceful-close timeout
    (default: **5 s**) to finish cleanly.
-4. The server waits up to a **10 s** process-level drain timeout for all
-   connection tasks to finish.
+4. The server waits up to the configured process-level drain timeout
+   (default: **10 s**) for existing connections to finish cleanly.
 5. Remaining connections are aborted after timeout.
 6. `/livez` stays `200` until process exit.
 

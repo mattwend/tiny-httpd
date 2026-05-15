@@ -15,7 +15,7 @@ async fn get_and_head_behavior() {
         .await
         .expect("write index");
 
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let get = server.request(Method::GET, "/").await;
     assert_eq!(get.status(), StatusCode::OK);
@@ -67,7 +67,7 @@ async fn get_and_head_behavior() {
 #[tokio::test]
 async fn unsupported_methods_return_405_and_allow_header() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let server = TestServer::spawn(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::POST, "/").await;
 
