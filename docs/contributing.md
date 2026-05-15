@@ -4,19 +4,20 @@
 
 - Rust + Cargo (stable)
 - Podman for local container builds
-- Docker Buildx for GitHub Actions container validation and publishing
+- Docker Buildx for GitHub Actions container validation (`docker/setup-buildx-action`)
+- `musl-tools` and the Rust target `x86_64-unknown-linux-musl` for the reference container build
 
 ## Development workflow
 
 ```bash
-cargo fmt
-cargo clippy -- -D warnings
-cargo test
+cargo fmt -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
 cargo build --release
 ```
 
-Run `cargo fmt` and `cargo clippy` before every commit. The CI pipeline
-enforces both.
+Run `cargo fmt` and `cargo clippy` before every commit. CI enforces
+formatting, clippy, tests, coverage generation, and container validation.
 
 ## Commit conventions
 
@@ -39,4 +40,6 @@ Commit in logical parts — one concern per commit.
   (`#[cfg(test)]` is exempt).
 - No silent error swallowing: dropped `Err` must be logged or propagated.
 - Document functions including arguments and return values.
+- When behavior changes materially, update durable docs in the owning
+  component.
 - Do not ignore or adapt tests without explicit consent.
