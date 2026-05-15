@@ -1,5 +1,6 @@
 mod common;
 
+use http_body_util::BodyExt;
 use hyper::{Method, StatusCode};
 
 use common::TestServer;
@@ -58,6 +59,13 @@ async fn missing_direct_file_falls_back_to_directory_index() {
     let response = server.request(Method::GET, "/docs").await;
 
     assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    assert_eq!(&body[..], b"docs index\n");
 
     server.shutdown().await;
 }

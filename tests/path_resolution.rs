@@ -95,6 +95,23 @@ async fn file_then_directory_index_fallback_matches_rfc() {
 
     let docs = server.request(Method::GET, "/docs").await;
     assert_eq!(docs.status(), StatusCode::OK);
+    let docs_body = docs
+        .into_body()
+        .collect()
+        .await
+        .expect("docs body")
+        .to_bytes();
+    assert_eq!(&docs_body[..], b"docs");
+
+    let other = server.request(Method::GET, "/other").await;
+    assert_eq!(other.status(), StatusCode::OK);
+    let other_body = other
+        .into_body()
+        .collect()
+        .await
+        .expect("other body")
+        .to_bytes();
+    assert_eq!(&other_body[..], b"other");
 
     let missing = server.request(Method::GET, "/lonely").await;
     assert_eq!(missing.status(), StatusCode::NOT_FOUND);
