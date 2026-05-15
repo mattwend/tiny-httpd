@@ -1,6 +1,7 @@
 # tiny-httpd
 
 Minimal, single-binary HTTP server for serving static websites in Kubernetes.
+Auditable, minimal, and safe by construction.
 No TLS — let your ingress or service mesh handle that.
 
 ## Features
