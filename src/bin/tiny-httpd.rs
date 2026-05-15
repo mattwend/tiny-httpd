@@ -15,6 +15,7 @@ use tracing::{error, warn};
 const DEFAULT_LISTEN_ADDR: &str = "0.0.0.0:8080";
 const DEFAULT_CONTENT_ROOT: &str = "/app/public";
 const DEFAULT_SERVICE_NAME: &str = "tiny-httpd";
+// Keep these CLI defaults aligned with `ServerParams::default()`.
 const DEFAULT_HEADER_READ_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
 const DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
