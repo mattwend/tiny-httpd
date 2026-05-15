@@ -8,7 +8,7 @@ use std::{
 use clap::Parser;
 use telemetry_setup::{TelemetryBuilder, TelemetryError};
 use thiserror::Error;
-use tiny_httpd::{DEFAULT_DRAIN_TIMEOUT_SECS, run_with_shutdown};
+use tiny_httpd::{DEFAULT_DRAIN_TIMEOUT_SECS, ServerParams, run_with_shutdown};
 use tokio::net::TcpListener;
 use tracing::{error, warn};
 
@@ -235,11 +235,13 @@ async fn main() -> Result<(), MainError> {
 
     let result = run_with_shutdown(
         listener,
-        content_root,
-        Duration::from_secs(config.header_read_timeout_secs),
-        Duration::from_secs(config.idle_connection_timeout_secs),
-        Duration::from_secs(config.graceful_close_timeout_secs),
-        Duration::from_secs(config.drain_timeout_secs),
+        ServerParams {
+            content_root,
+            header_read_timeout: Duration::from_secs(config.header_read_timeout_secs),
+            idle_connection_timeout: Duration::from_secs(config.idle_connection_timeout_secs),
+            graceful_close_timeout: Duration::from_secs(config.graceful_close_timeout_secs),
+            drain_timeout: Duration::from_secs(config.drain_timeout_secs),
+        },
         shutdown_signal,
     )
     .await;

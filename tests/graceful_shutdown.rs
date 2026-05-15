@@ -12,6 +12,7 @@ use common::{
     TEST_DEFAULT_DRAIN_TIMEOUT_SECS, TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
     TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS, TestServer, client,
 };
+use tiny_httpd::ServerParams;
 
 async fn spawn_server(content_root: std::path::PathBuf) -> TestServer {
     TestServer::spawn(content_root).await
@@ -27,11 +28,13 @@ async fn spawn_server_with_idle_timeout(
 
     TestServer::spawn_with_params(
         listener,
-        Some(content_root),
-        Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
-        idle_connection_timeout,
-        Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
-        Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
+        ServerParams {
+            content_root: Some(content_root),
+            header_read_timeout: Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
+            idle_connection_timeout,
+            graceful_close_timeout: Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
+            drain_timeout: Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
+        },
     )
     .await
 }

@@ -5,7 +5,7 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
-use tiny_httpd::run_with_shutdown;
+use tiny_httpd::{ServerParams, run_with_shutdown};
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
 use tracing::warn;
 
@@ -31,38 +31,31 @@ impl TestServer {
             .expect("bind listener");
         Self::spawn_with_params(
             listener,
-            Some(content_root),
-            std::time::Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
-            std::time::Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
-            std::time::Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
-            std::time::Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
+            ServerParams {
+                content_root: Some(content_root),
+                header_read_timeout: std::time::Duration::from_secs(
+                    TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS,
+                ),
+                idle_connection_timeout: std::time::Duration::from_secs(
+                    TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS,
+                ),
+                graceful_close_timeout: std::time::Duration::from_secs(
+                    TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
+                ),
+                drain_timeout: std::time::Duration::from_secs(TEST_DEFAULT_DRAIN_TIMEOUT_SECS),
+            },
         )
         .await
     }
 
-    pub async fn spawn_with_params(
-        listener: TcpListener,
-        content_root: Option<std::path::PathBuf>,
-        header_read_timeout: std::time::Duration,
-        idle_connection_timeout: std::time::Duration,
-        graceful_close_timeout: std::time::Duration,
-        drain_timeout: std::time::Duration,
-    ) -> Self {
+    pub async fn spawn_with_params(listener: TcpListener, params: ServerParams) -> Self {
         let addr = listener.local_addr().expect("local addr");
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let task = tokio::spawn(async move {
-            run_with_shutdown(
-                listener,
-                content_root,
-                header_read_timeout,
-                idle_connection_timeout,
-                graceful_close_timeout,
-                drain_timeout,
-                || async move {
-                    let _ = shutdown_rx.await;
-                    Ok(())
-                },
-            )
+            run_with_shutdown(listener, params, || async move {
+                let _ = shutdown_rx.await;
+                Ok(())
+            })
             .await
         });
 

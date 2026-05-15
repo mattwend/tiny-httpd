@@ -21,15 +21,26 @@ use crate::{
 /// Time to keep listener accepting only readiness observations after shutdown starts.
 const READINESS_DRAIN_WINDOW_MILLIS: u64 = 250;
 
+/// Parameters controlling server behavior.
+#[derive(Debug, Clone)]
+pub struct ServerParams {
+    /// Canonical static content root when one is available.
+    pub content_root: Option<PathBuf>,
+    /// Maximum time allowed to receive complete HTTP/1 request headers.
+    pub header_read_timeout: Duration,
+    /// Maximum idle time allowed for one open connection.
+    pub idle_connection_timeout: Duration,
+    /// Maximum graceful-close time for one draining connection.
+    pub graceful_close_timeout: Duration,
+    /// Maximum process-level time to wait for all draining connections.
+    pub drain_timeout: Duration,
+}
+
 /// Runs the server with an injectable shutdown future for tests or binaries.
 ///
 /// # Arguments
 /// * `listener` - Bound TCP listener to accept connections from.
-/// * `content_root` - Canonical static content root when one is available.
-/// * `header_read_timeout` - Maximum time allowed to receive complete HTTP/1 request headers.
-/// * `idle_connection_timeout` - Maximum idle time allowed for one open connection.
-/// * `graceful_close_timeout` - Maximum graceful-close time for one draining connection.
-/// * `drain_timeout` - Maximum process-level time to wait for all draining connections.
+/// * `params` - Server behavior and timeout configuration.
 /// * `shutdown` - Factory producing a future that resolves when shutdown begins.
 ///
 /// # Returns
@@ -50,17 +61,20 @@ const READINESS_DRAIN_WINDOW_MILLIS: u64 = 250;
 /// for stuck connections, after which remaining tasks are aborted.
 pub async fn run_with_shutdown<F, Fut>(
     listener: TcpListener,
-    content_root: Option<PathBuf>,
-    header_read_timeout: Duration,
-    idle_connection_timeout: Duration,
-    graceful_close_timeout: Duration,
-    drain_timeout: Duration,
+    params: ServerParams,
     shutdown: F,
 ) -> Result<(), std::io::Error>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), std::io::Error>>,
 {
+    let ServerParams {
+        content_root,
+        header_read_timeout,
+        idle_connection_timeout,
+        graceful_close_timeout,
+        drain_timeout,
+    } = params;
     let local_addr = listener.local_addr()?;
     let state = Arc::new(AppState::new(content_root));
     let (shutdown_tx, _) = watch::channel(false);
@@ -239,6 +253,12 @@ async fn serve_connection(
 }
 
 /// Waits for spawned connection tasks and logs task-level failures.
+///
+/// # Arguments
+/// * `connections` - Spawned connection-task set to join until empty.
+///
+/// # Returns
+/// Completes after every tracked task has exited or been aborted.
 async fn drain_connections(connections: &mut JoinSet<()>) {
     while let Some(result) = connections.join_next().await {
         if let Err(error) = result {

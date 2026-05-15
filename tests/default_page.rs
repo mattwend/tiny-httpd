@@ -5,7 +5,7 @@ use hyper::{
     Method, StatusCode,
     header::{CONTENT_LENGTH, CONTENT_TYPE},
 };
-use tiny_httpd::DEFAULT_DRAIN_TIMEOUT_SECS;
+use tiny_httpd::{DEFAULT_DRAIN_TIMEOUT_SECS, ServerParams};
 use tokio::net::TcpListener;
 
 use common::{
@@ -58,11 +58,19 @@ async fn missing_content_root_starts_and_serves_default_page() {
         .expect("bind listener");
     let server = TestServer::spawn_with_params(
         listener,
-        None,
-        std::time::Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
-        std::time::Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
-        std::time::Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
-        std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
+        ServerParams {
+            content_root: None,
+            header_read_timeout: std::time::Duration::from_secs(
+                TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS,
+            ),
+            idle_connection_timeout: std::time::Duration::from_secs(
+                TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS,
+            ),
+            graceful_close_timeout: std::time::Duration::from_secs(
+                TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
+            ),
+            drain_timeout: std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
+        },
     )
     .await;
 
@@ -87,11 +95,19 @@ async fn missing_content_root_returns_404_for_other_paths() {
         .expect("bind listener");
     let server = TestServer::spawn_with_params(
         listener,
-        None,
-        std::time::Duration::from_secs(TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS),
-        std::time::Duration::from_secs(TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS),
-        std::time::Duration::from_secs(TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS),
-        std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
+        ServerParams {
+            content_root: None,
+            header_read_timeout: std::time::Duration::from_secs(
+                TEST_DEFAULT_HEADER_READ_TIMEOUT_SECS,
+            ),
+            idle_connection_timeout: std::time::Duration::from_secs(
+                TEST_DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS,
+            ),
+            graceful_close_timeout: std::time::Duration::from_secs(
+                TEST_DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
+            ),
+            drain_timeout: std::time::Duration::from_secs(DEFAULT_DRAIN_TIMEOUT_SECS),
+        },
     )
     .await;
 
