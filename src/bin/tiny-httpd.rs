@@ -1,5 +1,6 @@
 use std::{
     io::ErrorKind,
+    net::SocketAddr,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -23,7 +24,12 @@ const DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
 #[command(version)]
 struct Config {
     /// Bind address.
-    #[arg(long, env = "TINY_HTTPD_LISTEN_ADDR", default_value = DEFAULT_LISTEN_ADDR)]
+    #[arg(
+        long,
+        env = "TINY_HTTPD_LISTEN_ADDR",
+        default_value = DEFAULT_LISTEN_ADDR,
+        value_parser = parse_listen_addr,
+    )]
     listen_addr: String,
     /// Static content root.
     #[arg(long, env = "TINY_HTTPD_CONTENT_ROOT", default_value = DEFAULT_CONTENT_ROOT)]
@@ -55,6 +61,50 @@ struct Config {
         value_parser = clap::value_parser!(u64).range(1..),
     )]
     graceful_close_timeout_secs: u64,
+}
+
+/// Parses and validates a listen address accepted by the CLI.
+///
+/// # Arguments
+/// * `value` - Raw CLI or environment value for `--listen-addr`.
+///
+/// # Returns
+/// The original string when it is either a valid `SocketAddr` or a `host:port`
+/// pair with a non-empty host and a valid, non-zero `u16` port.
+///
+/// # Errors
+/// Returns a descriptive string when the value is neither a socket address nor a
+/// syntactically valid `host:port` pair.
+fn parse_listen_addr(value: &str) -> Result<String, String> {
+    if let Ok(socket_addr) = value.parse::<SocketAddr>() {
+        if socket_addr.port() == 0 {
+            return Err("port must be greater than 0".to_owned());
+        }
+
+        return Ok(value.to_owned());
+    }
+
+    let Some((host, port)) = value.rsplit_once(':') else {
+        return Err("must be a SocketAddr or host:port".to_owned());
+    };
+
+    if host.is_empty() {
+        return Err("host must not be empty".to_owned());
+    }
+
+    if host.contains(':') && !(host.starts_with('[') && host.ends_with(']')) {
+        return Err("IPv6 addresses must be enclosed in brackets, e.g. [::1]:8080".to_owned());
+    }
+
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| "port must be a valid 16-bit unsigned integer".to_owned())?;
+
+    if port == 0 {
+        return Err("port must be greater than 0".to_owned());
+    }
+
+    Ok(value.to_owned())
 }
 
 /// Waits for process shutdown signal.
@@ -194,4 +244,50 @@ async fn main() -> Result<(), MainError> {
     }
 
     result.map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_listen_addr;
+
+    #[test]
+    fn parse_listen_addr_accepts_socket_addrs_and_hostnames() {
+        for value in ["127.0.0.1:8080", "[::1]:8080", "localhost:443"] {
+            assert_eq!(parse_listen_addr(value), Ok(value.to_owned()));
+        }
+    }
+
+    #[test]
+    fn parse_listen_addr_rejects_port_zero() {
+        for value in ["127.0.0.1:0", "localhost:0", "[::1]:0"] {
+            assert_eq!(
+                parse_listen_addr(value),
+                Err("port must be greater than 0".to_owned())
+            );
+        }
+    }
+
+    #[test]
+    fn parse_listen_addr_rejects_missing_separator_or_empty_host() {
+        assert_eq!(
+            parse_listen_addr("nocolon"),
+            Err("must be a SocketAddr or host:port".to_owned())
+        );
+        assert_eq!(
+            parse_listen_addr(":8080"),
+            Err("host must not be empty".to_owned())
+        );
+    }
+
+    #[test]
+    fn parse_listen_addr_rejects_unbracketed_ipv6_and_invalid_port() {
+        assert_eq!(
+            parse_listen_addr("::1:8080"),
+            Err("IPv6 addresses must be enclosed in brackets, e.g. [::1]:8080".to_owned())
+        );
+        assert_eq!(
+            parse_listen_addr("host:99999"),
+            Err("port must be a valid 16-bit unsigned integer".to_owned())
+        );
+    }
 }
