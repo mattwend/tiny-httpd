@@ -13,4 +13,4 @@ mod metrics;
 /// Server accept loop and shutdown APIs.
 pub mod server;
 
-pub use server::{DEFAULT_DRAIN_TIMEOUT_SECS, ServerError, run_with_shutdown};
+pub use server::{DEFAULT_DRAIN_TIMEOUT_SECS, run_with_shutdown};

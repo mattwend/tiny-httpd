@@ -15,7 +15,7 @@ use tracing::{error, info, warn};
 
 use crate::{
     handler::{AppState, handle_with_peer_addr},
-    server::{ServerError, activity_io::ActivityIo},
+    server::activity_io::ActivityIo,
 };
 
 /// Time to keep listener accepting only readiness observations after shutdown starts.
@@ -36,7 +36,7 @@ const READINESS_DRAIN_WINDOW_MILLIS: u64 = 250;
 /// `Ok(())` after the accept loop stops and tracked connections have drained.
 ///
 /// # Errors
-/// Returns [`ServerError`] for listener-local-address lookup before the accept
+/// Returns [`std::io::Error`] for listener-local-address lookup before the accept
 /// loop begins. Transient listener accept failures while serving are logged and
 /// do not stop the server.
 ///
@@ -56,7 +56,7 @@ pub async fn run_with_shutdown<F, Fut>(
     graceful_close_timeout: Duration,
     drain_timeout: Duration,
     shutdown: F,
-) -> Result<(), ServerError>
+) -> Result<(), std::io::Error>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), std::io::Error>>,

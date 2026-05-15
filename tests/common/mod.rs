@@ -21,7 +21,7 @@ pub fn client() -> Client<HttpConnector, Empty<Bytes>> {
 pub struct TestServer {
     addr: std::net::SocketAddr,
     shutdown_tx: Option<oneshot::Sender<()>>,
-    task: Option<JoinHandle<Result<(), tiny_httpd::ServerError>>>,
+    task: Option<JoinHandle<Result<(), std::io::Error>>>,
 }
 
 impl TestServer {

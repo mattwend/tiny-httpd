@@ -8,7 +8,7 @@ use std::{
 use clap::Parser;
 use telemetry_setup::{TelemetryBuilder, TelemetryError};
 use thiserror::Error;
-use tiny_httpd::{DEFAULT_DRAIN_TIMEOUT_SECS, ServerError, run_with_shutdown};
+use tiny_httpd::{DEFAULT_DRAIN_TIMEOUT_SECS, run_with_shutdown};
 use tokio::net::TcpListener;
 use tracing::{error, warn};
 
@@ -217,7 +217,7 @@ enum MainError {
     #[error(transparent)]
     Startup(#[from] StartupError),
     #[error(transparent)]
-    Server(#[from] ServerError),
+    Server(#[from] std::io::Error),
 }
 
 /// Loads configuration, initializes telemetry, and runs server until shutdown.
