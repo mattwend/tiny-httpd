@@ -86,6 +86,16 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> ResponseOut
     }
 
     if path == "/readyz" {
+        let ready = state.ready.load(Ordering::Acquire);
+        if !ready {
+            warn!(ready, "readiness probe failed");
+            return probe_response(
+                method == Method::HEAD,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "not ready\n",
+            );
+        }
+
         let readable = match &state.content_root {
             None => true,
             Some(content_root) => match fs::metadata(content_root).await {
@@ -96,14 +106,11 @@ async fn route(state: Arc<AppState>, method: &Method, path: &str) -> ResponseOut
                 }
             },
         };
-        if state.ready.load(Ordering::Acquire) && readable {
+        if readable {
             debug!("readiness probe passed");
             return probe_response(method == Method::HEAD, StatusCode::OK, "ready\n");
         }
-        warn!(
-            ready = state.ready.load(Ordering::Acquire),
-            readable, "readiness probe failed"
-        );
+        warn!(ready, readable, "readiness probe failed");
         return probe_response(
             method == Method::HEAD,
             StatusCode::SERVICE_UNAVAILABLE,
