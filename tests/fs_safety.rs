@@ -12,12 +12,33 @@ async fn invalid_percent_encoding_and_traversal_return_400() {
 
     let invalid = server.request(Method::GET, "/%zz").await;
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let invalid_body = invalid
+        .into_body()
+        .collect()
+        .await
+        .expect("invalid percent body")
+        .to_bytes();
+    assert_eq!(&invalid_body[..], b"bad request\n");
 
     let traversal = server.request(Method::GET, "/%2e%2e/secret").await;
     assert_eq!(traversal.status(), StatusCode::BAD_REQUEST);
+    let traversal_body = traversal
+        .into_body()
+        .collect()
+        .await
+        .expect("traversal body")
+        .to_bytes();
+    assert_eq!(&traversal_body[..], b"bad request\n");
 
     let encoded_slash = server.request(Method::GET, "/a%2f%2fb").await;
     assert_eq!(encoded_slash.status(), StatusCode::BAD_REQUEST);
+    let encoded_slash_body = encoded_slash
+        .into_body()
+        .collect()
+        .await
+        .expect("encoded slash body")
+        .to_bytes();
+    assert_eq!(&encoded_slash_body[..], b"bad request\n");
 
     server.shutdown().await;
 }

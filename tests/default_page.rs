@@ -44,6 +44,13 @@ async fn empty_content_root_dir_returns_404_for_other_paths() {
 
     let response = server.request(Method::GET, "/other").await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("not found body")
+        .to_bytes();
+    assert_eq!(&body[..], b"not found\n");
 
     server.shutdown().await;
 }
@@ -92,6 +99,13 @@ async fn missing_content_root_returns_404_for_other_paths() {
 
     let response = server.request(Method::GET, "/other").await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("not found body")
+        .to_bytes();
+    assert_eq!(&body[..], b"not found\n");
 
     server.shutdown().await;
 }

@@ -134,6 +134,13 @@ async fn missing_files_return_404() {
             .and_then(|v| v.to_str().ok()),
         Some("10")
     );
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("not found body")
+        .to_bytes();
+    assert_eq!(&body[..], b"not found\n");
 
     server.shutdown().await;
 }
