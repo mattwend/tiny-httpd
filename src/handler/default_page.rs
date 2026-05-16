@@ -10,8 +10,14 @@ use crate::handler::response::{
 
 pub(crate) const DEFAULT_INDEX_HTML: &str = include_str!("../default_index.html");
 
-/// Builds response for embedded fallback index page.
-pub(crate) fn default_index_response(head_only: bool) -> ResponseOutcome {
+/// Builds response outcome for embedded fallback index page.
+///
+/// # Arguments
+/// * `head_only` - When `true`, omits the body while preserving headers.
+///
+/// # Returns
+/// A response outcome with the embedded page response and exact body size.
+pub(crate) fn default_index_outcome(head_only: bool) -> ResponseOutcome {
     let body = if head_only {
         empty_response_body()
     } else {
@@ -30,15 +36,4 @@ pub(crate) fn default_index_response(head_only: bool) -> ResponseOutcome {
             internal_error_response("failed to build embedded default page response", error)
         }
     }
-}
-
-/// Builds response outcome for embedded fallback index page.
-///
-/// # Arguments
-/// * `head_only` - When `true`, omits the body while preserving headers.
-///
-/// # Returns
-/// A response outcome with the embedded page response and exact body size.
-pub(crate) fn default_index_outcome(head_only: bool) -> ResponseOutcome {
-    default_index_response(head_only)
 }
