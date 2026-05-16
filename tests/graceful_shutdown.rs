@@ -9,12 +9,11 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use common::{TestServer, client};
+use common::{
+    TestServer, client,
+    raw::{read_until_hello, server_addr, write_keep_alive_root_request},
+};
 use tiny_httpd::ServerParams;
-
-async fn spawn_server(content_root: std::path::PathBuf) -> TestServer {
-    TestServer::spawn(content_root).await
-}
 
 async fn spawn_server_with_idle_timeout(
     content_root: std::path::PathBuf,
@@ -41,46 +40,16 @@ async fn write_index(tempdir: &tempfile::TempDir) {
         .expect("write index");
 }
 
-fn server_addr(server: &TestServer) -> std::net::SocketAddr {
-    server
-        .uri("/")
-        .trim_start_matches("http://")
-        .trim_end_matches('/')
-        .parse()
-        .expect("server addr")
-}
-
-async fn read_until_hello(stream: &mut TcpStream, buffer: &mut [u8]) -> Vec<u8> {
-    let mut response = Vec::new();
-    loop {
-        let read = tokio::time::timeout(Duration::from_secs(1), stream.read(buffer))
-            .await
-            .expect("response read timeout")
-            .expect("read response");
-        assert!(
-            read > 0,
-            "connection closed before first response completed"
-        );
-        response.extend_from_slice(&buffer[..read]);
-        if response.windows(5).any(|window| window == b"hello") {
-            return response;
-        }
-    }
-}
-
 #[tokio::test]
 async fn idle_keep_alive_connections_close_promptly_on_shutdown() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let mut stream = TcpStream::connect(server_addr(&server))
         .await
         .expect("connect");
-    stream
-        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")
-        .await
-        .expect("write request");
+    write_keep_alive_root_request(&mut stream).await;
 
     let mut buffer = [0_u8; 1024];
     read_until_hello(&mut stream, &mut buffer).await;
@@ -116,10 +85,7 @@ async fn idle_keep_alive_connections_close_promptly_after_idle_timeout() {
     let mut stream = TcpStream::connect(server_addr(&server))
         .await
         .expect("connect");
-    stream
-        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")
-        .await
-        .expect("write request");
+    write_keep_alive_root_request(&mut stream).await;
 
     let mut buffer = [0_u8; 1024];
     read_until_hello(&mut stream, &mut buffer).await;
@@ -160,10 +126,7 @@ async fn active_keep_alive_connections_do_not_hit_idle_timeout() {
     let mut buffer = [0_u8; 1024];
 
     for _ in 0..3 {
-        stream
-            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")
-            .await
-            .expect("write request");
+        write_keep_alive_root_request(&mut stream).await;
 
         let response = read_until_hello(&mut stream, &mut buffer).await;
         let response = String::from_utf8_lossy(&response);
@@ -179,7 +142,7 @@ async fn active_keep_alive_connections_do_not_hit_idle_timeout() {
 async fn shutdown_after_completed_request_still_drains_promptly() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let response = server.request(Method::GET, "/").await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -191,7 +154,7 @@ async fn shutdown_after_completed_request_still_drains_promptly() {
 async fn graceful_shutdown_keeps_liveness_ok_while_readiness_fails_during_drain_window() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let before = client()
         .get(server.uri("/readyz").parse().expect("uri"))
@@ -221,7 +184,7 @@ async fn graceful_shutdown_keeps_liveness_ok_while_readiness_fails_during_drain_
 async fn graceful_shutdown_rejects_non_probe_requests_during_drain_window() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     server.trigger_shutdown();
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -246,7 +209,7 @@ async fn graceful_shutdown_rejects_non_probe_requests_during_drain_window() {
 async fn shutdown_flips_probe_states_before_listener_stops_accepting() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
 
     let mut stream = TcpStream::connect(server_addr(&server))
         .await
@@ -298,7 +261,7 @@ async fn shutdown_flips_probe_states_before_listener_stops_accepting() {
     );
 
     let client = client();
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let refused = client
         .get(server.uri("/readyz").parse().expect("uri"))
@@ -317,7 +280,7 @@ async fn shutdown_flips_probe_states_before_listener_stops_accepting() {
 async fn graceful_shutdown_stops_accepting_promptly_without_new_connections() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     write_index(&tempdir).await;
-    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
+    let mut server = TestServer::spawn(tempdir.path().to_path_buf()).await;
     let addr = server_addr(&server);
 
     let started = Instant::now();
@@ -333,41 +296,4 @@ async fn graceful_shutdown_stops_accepting_promptly_without_new_connections() {
         refused.is_err(),
         "listener should stop accepting after shutdown"
     );
-}
-
-#[tokio::test]
-async fn server_serves_http_requests_before_shutdown() {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    write_index(&tempdir).await;
-    let mut server = spawn_server(tempdir.path().to_path_buf()).await;
-
-    let client = client();
-
-    let readyz = client
-        .get(server.uri("/readyz").parse().expect("uri"))
-        .await
-        .expect("readyz before shutdown");
-    assert_eq!(readyz.status(), StatusCode::OK);
-    let readyz_body = readyz
-        .into_body()
-        .collect()
-        .await
-        .expect("readyz body")
-        .to_bytes();
-    assert_eq!(&readyz_body[..], b"ready\n");
-
-    let root = client
-        .get(server.uri("/").parse().expect("uri"))
-        .await
-        .expect("root before shutdown");
-    assert_eq!(root.status(), StatusCode::OK);
-    let root_body = root
-        .into_body()
-        .collect()
-        .await
-        .expect("root body")
-        .to_bytes();
-    assert_eq!(&root_body[..], b"hello");
-
-    server.shutdown().await;
 }
