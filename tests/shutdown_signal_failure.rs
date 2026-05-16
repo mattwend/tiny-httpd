@@ -7,7 +7,7 @@ use tokio::{
 };
 
 #[tokio::test]
-async fn shutdown_signal_channel_close_path_marks_readiness_unavailable() {
+async fn shutdown_signal_failure_marks_readiness_unavailable() {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind listener");
