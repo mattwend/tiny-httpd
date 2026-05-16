@@ -164,7 +164,10 @@ where
         .header(CONTENT_TYPE, "text/plain; charset=utf-8")
         .header(CONTENT_LENGTH, body.len())
         .body(full_body(body))
-        .unwrap_or_else(|_| Response::new(full_body(body)));
+        .unwrap_or_else(|error| {
+            error!(error = %error, "internal_error_response builder failed");
+            Response::new(full_body(body))
+        });
 
     ResponseOutcome::new(response, body.len() as u64)
 }
