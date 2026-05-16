@@ -130,6 +130,7 @@ struct Config {
         help = "Print help",
         help_heading = "Options",
     )]
+    // Dummy field used to customize clap's generated short-help flag while global auto-help is disabled.
     help: Option<bool>,
     #[arg(
         short = 'V',
@@ -138,6 +139,7 @@ struct Config {
         help = "Print version",
         help_heading = "Options",
     )]
+    // Dummy field used to customize clap's generated version flag while global auto-version is disabled.
     version: Option<bool>,
 }
 
