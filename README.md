@@ -1,8 +1,12 @@
 # tiny-httpd
 
-Minimal, single-binary HTTP server for serving static websites in Kubernetes.
+GPL-3.0-or-later licensed minimal, single-binary HTTP server for serving static websites in Kubernetes.
 Auditable, minimal, and safe by construction.
 No TLS — let your ingress or service mesh handle that.
+
+## License
+
+Licensed under the GNU General Public License, version 3 or later. See [`LICENSE`](LICENSE).
 
 ## Features
 
@@ -14,17 +18,18 @@ No TLS — let your ingress or service mesh handle that.
 - Graceful shutdown with readiness drain to support zero-downtime rollouts
 - Configurable HTTP/1 header-read, idle-connection, graceful-close, and process-level drain timeouts
 - Structured tracing and HTTP request metrics
-- Static musl binary in a `scratch` container image
+- Static musl binary in a `scratch` container image running as non-root UID/GID `65532`
 
 ## Prerequisites
 
-- Rust + Cargo
+- Rust + Cargo (toolchain `1.95.0`; see `rust-toolchain.toml`)
 - Podman for local container builds
 - Docker Buildx for GitHub Actions container validation and publishing
 - `musl-tools` and the Rust target `x86_64-unknown-linux-musl` for the reference container build
 
-The reference container build targets `x86_64-unknown-linux-musl` and
-produces a static binary for a `scratch` image.
+The repository pins Rust `1.95.0` for reproducible local and container
+builds. The reference container build targets `x86_64-unknown-linux-musl`
+and produces a static binary for a `scratch` image.
 
 ## Quick start
 

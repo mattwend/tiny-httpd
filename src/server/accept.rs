@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Matthias Wende
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::service::service_fn;
@@ -11,7 +14,7 @@ use tokio::{
     task::JoinSet,
     time::{Instant, Sleep, timeout},
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     handler::{AppState, handle_with_peer_addr},
@@ -176,7 +179,9 @@ where
         }
     }
 
-    let _ = shutdown_tx.send(true);
+    if let Err(error) = shutdown_tx.send(true) {
+        debug!(error = %error, "shutdown broadcast had no active receivers");
+    }
 
     match timeout(drain_timeout, drain_connections(&mut connections)).await {
         Ok(()) => info!("all connections drained gracefully"),
