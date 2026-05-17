@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Matthias Wende
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Raw TCP helpers are used only by graceful-shutdown integration tests; each
 // integration test binary compiles `common` independently, so other binaries see
 // these as intentionally unused.

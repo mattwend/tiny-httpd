@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Matthias Wende
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::service::service_fn;
