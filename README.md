@@ -18,7 +18,7 @@ Licensed under the GNU General Public License, version 3 or later. See [`LICENSE
 - Graceful shutdown with readiness drain to support zero-downtime rollouts
 - Configurable HTTP/1 header-read, idle-connection, graceful-close, and process-level drain timeouts
 - Structured tracing and HTTP request metrics
-- Static musl binary in a `scratch` container image
+- Static musl binary in a `scratch` container image running as non-root UID/GID `65532`
 
 ## Prerequisites
 
