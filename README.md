@@ -1,8 +1,12 @@
 # tiny-httpd
 
-Minimal, single-binary HTTP server for serving static websites in Kubernetes.
+GPL-3.0-or-later licensed minimal, single-binary HTTP server for serving static websites in Kubernetes.
 Auditable, minimal, and safe by construction.
 No TLS — let your ingress or service mesh handle that.
+
+## License
+
+Licensed under the GNU General Public License, version 3 or later. See [`LICENSE`](LICENSE).
 
 ## Features
 
