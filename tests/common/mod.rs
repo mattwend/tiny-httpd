@@ -1,3 +1,9 @@
+// Raw TCP helpers are used only by graceful-shutdown integration tests; each
+// integration test binary compiles `common` independently, so other binaries see
+// these as intentionally unused.
+#[allow(dead_code)]
+pub mod raw;
+
 use bytes::Bytes;
 use http_body_util::Empty;
 use hyper::{Method, Request, Response};

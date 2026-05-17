@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use clap::Parser;
+use clap::{ArgAction, Parser, ValueHint};
 use telemetry_setup::{TelemetryBuilder, TelemetryError};
 use thiserror::Error;
 use tiny_httpd::{ServerParams, run_with_shutdown};
@@ -17,61 +17,130 @@ const DEFAULT_CONTENT_ROOT: &str = "/app/public";
 const DEFAULT_SERVICE_NAME: &str = "tiny-httpd";
 // These CLI defaults are intentionally independent from `ServerParams::default()`
 // so the binary can own runtime policy separately from the library API.
-const DEFAULT_HEADER_READ_TIMEOUT_SECS: u64 = 30;
-const DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
-const DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS: u64 = 5;
-const DEFAULT_DRAIN_TIMEOUT_SECS: u64 = 10;
+const DEFAULT_HEADER_READ_TIMEOUT: &str = "30s";
+const DEFAULT_IDLE_CONNECTION_TIMEOUT: &str = "60s";
+const DEFAULT_GRACEFUL_CLOSE_TIMEOUT: &str = "5s";
+const DEFAULT_DRAIN_TIMEOUT: &str = "10s";
+const HELP_TEMPLATE: &str =
+    "{name} {version}\n{about-with-newline}\n{usage-heading} {usage}\n\n{all-args}{after-help}";
+const TIMEOUTS_HEADING: &str = "Timeouts (durations like \"30s\", \"2m\", \"1h30m\")";
+const AFTER_HELP: &str = r#"Examples:
+  # Serve local files during development
+  tiny-httpd -l 127.0.0.1:3000 -r ./public
 
-/// Runtime configuration for the HTTP server.
+  # Run with container-friendly defaults
+  tiny-httpd
+
+  # Custom timeouts for slow networks
+  tiny-httpd --header-read-timeout 60s --idle-connection-timeout 2m
+
+  # Serve content from a different directory
+  tiny-httpd -r ./dist
+
+Repository: https://github.com/mattwend/tiny-httpd"#;
+
 #[derive(Debug, Clone, Parser)]
-#[command(version)]
+#[command(
+    version,
+    about = "Minimal static-file HTTP server for containers and Kubernetes",
+    long_about = None,
+    help_template = HELP_TEMPLATE,
+    after_help = AFTER_HELP,
+    disable_help_flag = true,
+    disable_version_flag = true,
+)]
 struct Config {
     /// Bind address.
     #[arg(
+        short = 'l',
         long,
         env = "TINY_HTTPD_LISTEN_ADDR",
         default_value = DEFAULT_LISTEN_ADDR,
+        value_name = "ADDR",
+        value_hint = ValueHint::Other,
         value_parser = parse_listen_addr,
+        help_heading = "Server",
     )]
     listen_addr: String,
     /// Static content root.
-    #[arg(long, env = "TINY_HTTPD_CONTENT_ROOT", default_value = DEFAULT_CONTENT_ROOT)]
+    #[arg(
+        short = 'r',
+        long,
+        env = "TINY_HTTPD_CONTENT_ROOT",
+        default_value = DEFAULT_CONTENT_ROOT,
+        value_name = "PATH",
+        value_hint = ValueHint::DirPath,
+        help_heading = "Server",
+    )]
     content_root: PathBuf,
     /// Telemetry service name.
-    #[arg(long, env = "TINY_HTTPD_SERVICE_NAME", default_value = DEFAULT_SERVICE_NAME)]
+    #[arg(
+        long,
+        env = "TINY_HTTPD_SERVICE_NAME",
+        default_value = DEFAULT_SERVICE_NAME,
+        value_name = "NAME",
+        value_hint = ValueHint::Other,
+        help_heading = "Server",
+    )]
     service_name: String,
-    /// HTTP/1 header read timeout in seconds.
+    /// HTTP/1 header read timeout.
     #[arg(
         long,
-        env = "TINY_HTTPD_HEADER_READ_TIMEOUT_SECS",
-        default_value_t = DEFAULT_HEADER_READ_TIMEOUT_SECS,
-        value_parser = clap::value_parser!(u64).range(1..),
+        env = "TINY_HTTPD_HEADER_READ_TIMEOUT",
+        default_value = DEFAULT_HEADER_READ_TIMEOUT,
+        value_name = "DUR",
+        value_parser = parse_duration,
+        help_heading = TIMEOUTS_HEADING,
     )]
-    header_read_timeout_secs: u64,
-    /// Maximum idle time (seconds) before server closes an inactive connection.
+    header_read_timeout: Duration,
+    /// Maximum idle time before server closes an inactive connection.
     #[arg(
         long,
-        env = "TINY_HTTPD_IDLE_CONNECTION_TIMEOUT_SECS",
-        default_value_t = DEFAULT_IDLE_CONNECTION_TIMEOUT_SECS,
-        value_parser = clap::value_parser!(u64).range(1..),
+        env = "TINY_HTTPD_IDLE_CONN_TIMEOUT",
+        default_value = DEFAULT_IDLE_CONNECTION_TIMEOUT,
+        value_name = "DUR",
+        value_parser = parse_duration,
+        help_heading = TIMEOUTS_HEADING,
     )]
-    idle_connection_timeout_secs: u64,
-    /// Maximum graceful-close time (seconds) before a draining connection is dropped.
+    idle_connection_timeout: Duration,
+    /// Maximum graceful-close time before a draining connection is dropped.
     #[arg(
         long,
-        env = "TINY_HTTPD_GRACEFUL_CLOSE_TIMEOUT_SECS",
-        default_value_t = DEFAULT_GRACEFUL_CLOSE_TIMEOUT_SECS,
-        value_parser = clap::value_parser!(u64).range(1..),
+        env = "TINY_HTTPD_GRACEFUL_CLOSE_TIMEOUT",
+        default_value = DEFAULT_GRACEFUL_CLOSE_TIMEOUT,
+        value_name = "DUR",
+        value_parser = parse_duration,
+        help_heading = TIMEOUTS_HEADING,
     )]
-    graceful_close_timeout_secs: u64,
-    /// Maximum process-level drain time (seconds) before remaining connections are aborted.
+    graceful_close_timeout: Duration,
+    /// Maximum process-level drain time before remaining connections are aborted.
     #[arg(
         long,
-        env = "TINY_HTTPD_DRAIN_TIMEOUT_SECS",
-        default_value_t = DEFAULT_DRAIN_TIMEOUT_SECS,
-        value_parser = clap::value_parser!(u64).range(1..),
+        env = "TINY_HTTPD_DRAIN_TIMEOUT",
+        default_value = DEFAULT_DRAIN_TIMEOUT,
+        value_name = "DUR",
+        value_parser = parse_duration,
+        help_heading = TIMEOUTS_HEADING,
     )]
-    drain_timeout_secs: u64,
+    drain_timeout: Duration,
+    #[arg(
+        short = 'h',
+        long = "help",
+        action = ArgAction::HelpShort,
+        help = "Print help",
+        help_heading = "Options",
+    )]
+    // Dummy field used to customize clap's generated short-help flag while global auto-help is disabled.
+    help: Option<bool>,
+    #[arg(
+        short = 'V',
+        long = "version",
+        action = ArgAction::Version,
+        help = "Print version",
+        help_heading = "Options",
+    )]
+    // Dummy field used to customize clap's generated version flag while global auto-version is disabled.
+    version: Option<bool>,
 }
 
 /// Parses and validates a listen address accepted by the CLI.
@@ -116,6 +185,28 @@ fn parse_listen_addr(value: &str) -> Result<String, String> {
     }
 
     Ok(value.to_owned())
+}
+
+/// Parses a human-readable duration string accepted by the CLI.
+///
+/// # Arguments
+/// * `value` - Raw CLI or environment value for a timeout option.
+///
+/// # Returns
+/// The parsed [`Duration`] when `value` uses a valid `humantime` format and is
+/// at least one second.
+///
+/// # Errors
+/// Returns a descriptive string when the duration cannot be parsed or is less
+/// than one second.
+fn parse_duration(value: &str) -> Result<Duration, String> {
+    let duration = humantime::parse_duration(value).map_err(|error| error.to_string())?;
+
+    if duration < Duration::from_secs(1) {
+        return Err("duration must be at least 1s".to_owned());
+    }
+
+    Ok(duration)
 }
 
 /// Waits for process shutdown signal.
@@ -240,10 +331,10 @@ async fn main() -> Result<(), MainError> {
         listener,
         ServerParams {
             content_root,
-            header_read_timeout: Duration::from_secs(config.header_read_timeout_secs),
-            idle_connection_timeout: Duration::from_secs(config.idle_connection_timeout_secs),
-            graceful_close_timeout: Duration::from_secs(config.graceful_close_timeout_secs),
-            drain_timeout: Duration::from_secs(config.drain_timeout_secs),
+            header_read_timeout: config.header_read_timeout,
+            idle_connection_timeout: config.idle_connection_timeout,
+            graceful_close_timeout: config.graceful_close_timeout,
+            drain_timeout: config.drain_timeout,
         },
         shutdown_signal,
     )
@@ -262,7 +353,11 @@ async fn main() -> Result<(), MainError> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_listen_addr;
+    use std::{path::PathBuf, time::Duration};
+
+    use clap::{CommandFactory, Parser};
+
+    use super::{Config, parse_duration, parse_listen_addr};
 
     #[test]
     fn parse_listen_addr_accepts_socket_addrs_and_hostnames() {
@@ -303,5 +398,86 @@ mod tests {
             parse_listen_addr("host:99999"),
             Err("port must be a valid 16-bit unsigned integer".to_owned())
         );
+    }
+
+    #[test]
+    fn parse_duration_accepts_human_readable_values() {
+        assert_eq!(parse_duration("30s"), Ok(Duration::from_secs(30)));
+        assert_eq!(parse_duration("2m"), Ok(Duration::from_secs(120)));
+        assert_eq!(parse_duration("1h30m"), Ok(Duration::from_secs(5_400)));
+    }
+
+    #[test]
+    fn parse_duration_rejects_values_below_one_second() {
+        assert_eq!(
+            parse_duration("999ms"),
+            Err("duration must be at least 1s".to_owned())
+        );
+    }
+
+    #[test]
+    fn config_parses_new_flags_and_defaults() {
+        let config = Config::parse_from(["tiny-httpd"]);
+
+        assert_eq!(config.listen_addr, "0.0.0.0:8080");
+        assert_eq!(config.content_root, PathBuf::from("/app/public"));
+        assert_eq!(config.service_name, "tiny-httpd");
+        assert_eq!(config.header_read_timeout, Duration::from_secs(30));
+        assert_eq!(config.idle_connection_timeout, Duration::from_secs(60));
+        assert_eq!(config.graceful_close_timeout, Duration::from_secs(5));
+        assert_eq!(config.drain_timeout, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn config_parses_short_flags_and_human_readable_durations() {
+        let config = Config::parse_from([
+            "tiny-httpd",
+            "-l",
+            "127.0.0.1:3000",
+            "-r",
+            "./public",
+            "--header-read-timeout",
+            "45s",
+            "--idle-connection-timeout",
+            "2m",
+            "--graceful-close-timeout",
+            "6s",
+            "--drain-timeout",
+            "12s",
+        ]);
+
+        assert_eq!(config.listen_addr, "127.0.0.1:3000");
+        assert_eq!(config.content_root, PathBuf::from("./public"));
+        assert_eq!(config.header_read_timeout, Duration::from_secs(45));
+        assert_eq!(config.idle_connection_timeout, Duration::from_secs(120));
+        assert_eq!(config.graceful_close_timeout, Duration::from_secs(6));
+        assert_eq!(config.drain_timeout, Duration::from_secs(12));
+    }
+
+    #[test]
+    fn config_rejects_legacy_timeout_flag_names() {
+        let error = Config::try_parse_from(["tiny-httpd", "--header-read-timeout-secs", "30"])
+            .expect_err("legacy timeout flag should be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unexpected argument '--header-read-timeout-secs'")
+        );
+    }
+
+    #[test]
+    fn help_output_orders_server_and_timeout_sections_before_options() {
+        let mut command = Config::command();
+        let help = command.render_help().to_string();
+
+        let server_index = help.find("Server:").expect("server section present");
+        let timeouts_index = help.find("Timeouts (").expect("timeouts section present");
+        let options_index = help.find("Options:").expect("options section present");
+
+        assert!(server_index < timeouts_index);
+        assert!(timeouts_index < options_index);
+        assert!(help.contains("Examples:"));
+        assert!(help.contains("Repository: https://github.com/mattwend/tiny-httpd"));
     }
 }

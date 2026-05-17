@@ -210,4 +210,27 @@ mod tests {
             "zero-byte read should not notify"
         );
     }
+
+    #[tokio::test]
+    async fn activity_io_write_vectored_notifies_on_non_zero_write() {
+        let activity = Arc::new(Notify::new());
+        let stream = tokio::io::duplex(64);
+        let mut wrapped = ActivityIo::new(stream.0, Arc::clone(&activity));
+        let mut reader = stream.1;
+
+        let notification = activity.notified();
+        let written = wrapped
+            .write_vectored(&[io::IoSlice::new(b"ab"), io::IoSlice::new(b"cd")])
+            .await
+            .expect("vectored write");
+        assert_eq!(written, 4);
+
+        tokio::time::timeout(Duration::from_millis(50), notification)
+            .await
+            .expect("vectored write should notify");
+
+        let mut buf = [0_u8; 4];
+        reader.read_exact(&mut buf).await.expect("read data");
+        assert_eq!(&buf, b"abcd");
+    }
 }

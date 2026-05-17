@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use tracing::warn;
+
 use opentelemetry::{
     KeyValue, global,
     metrics::{Counter, Histogram, UpDownCounter},
@@ -47,7 +49,9 @@ impl HttpMetrics {
     /// Records request start by incrementing the in-flight request gauge.
     ///
     /// # Returns
-    /// A guard that decrements the gauge when dropped.
+    /// A guard that must be explicitly finished before request-completion metrics
+    /// are recorded. Dropping an unfinished guard logs a warning and still
+    /// decrements the gauge as a last-resort fallback.
     pub(crate) fn request_started(&self) -> InFlightRequestGuard<'_> {
         self.in_flight.add(1, &[]);
         InFlightRequestGuard {
@@ -100,13 +104,10 @@ impl InFlightRequestGuard<'_> {
 
 impl Drop for InFlightRequestGuard<'_> {
     fn drop(&mut self) {
-        self.finish();
-    }
-}
-
-impl Default for HttpMetrics {
-    fn default() -> Self {
-        Self::new()
+        if !self.finished {
+            warn!("in-flight request guard dropped without explicit finish");
+            self.finish();
+        }
     }
 }
 
@@ -126,5 +127,29 @@ pub(crate) fn status_class(status: u16) -> &'static str {
         4 => "4xx",
         5 => "5xx",
         _ => "other",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HttpMetrics, status_class};
+
+    #[test]
+    fn status_class_covers_all_ranges_and_other_values() {
+        assert_eq!(status_class(100), "1xx");
+        assert_eq!(status_class(204), "2xx");
+        assert_eq!(status_class(302), "3xx");
+        assert_eq!(status_class(404), "4xx");
+        assert_eq!(status_class(503), "5xx");
+        assert_eq!(status_class(99), "other");
+        assert_eq!(status_class(600), "other");
+    }
+
+    #[test]
+    fn in_flight_guard_finish_is_idempotent() {
+        let metrics = HttpMetrics::new();
+        let mut guard = metrics.request_started();
+        guard.finish();
+        guard.finish();
     }
 }

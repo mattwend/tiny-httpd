@@ -21,6 +21,7 @@ No TLS — let your ingress or service mesh handle that.
 - Rust + Cargo
 - Podman for local container builds
 - Docker Buildx for GitHub Actions container validation and publishing
+- `musl-tools` and the Rust target `x86_64-unknown-linux-musl` for the reference container build
 
 The reference container build targets `x86_64-unknown-linux-musl` and
 produces a static binary for a `scratch` image.
@@ -30,7 +31,7 @@ produces a static binary for a `scratch` image.
 Run locally:
 
 ```bash
-cargo run -- --listen-addr 127.0.0.1:8080 --content-root ./public
+cargo run -- -l 127.0.0.1:8080 -r ./public
 ```
 
 Build and run the container:
@@ -45,16 +46,17 @@ Without a content root on disk, `/` serves the embedded welcome page.
 ## Configuration
 
 Environment variables can be overridden by CLI flags.
+Timeout values accept `humantime` syntax such as `30s`, `2m`, and `1h30m`.
 
 | Environment variable | CLI flag | Default |
 | --- | --- | --- |
 | `TINY_HTTPD_LISTEN_ADDR` | `--listen-addr` | `0.0.0.0:8080` |
 | `TINY_HTTPD_CONTENT_ROOT` | `--content-root` | `/app/public` |
 | `TINY_HTTPD_SERVICE_NAME` | `--service-name` | `tiny-httpd` |
-| `TINY_HTTPD_HEADER_READ_TIMEOUT_SECS` | `--header-read-timeout-secs` | `30` |
-| `TINY_HTTPD_IDLE_CONNECTION_TIMEOUT_SECS` | `--idle-connection-timeout-secs` | `60` |
-| `TINY_HTTPD_GRACEFUL_CLOSE_TIMEOUT_SECS` | `--graceful-close-timeout-secs` | `5` |
-| `TINY_HTTPD_DRAIN_TIMEOUT_SECS` | `--drain-timeout-secs` | `10` |
+| `TINY_HTTPD_HEADER_READ_TIMEOUT` | `--header-read-timeout` | `30s` |
+| `TINY_HTTPD_IDLE_CONN_TIMEOUT` | `--idle-connection-timeout` | `60s` |
+| `TINY_HTTPD_GRACEFUL_CLOSE_TIMEOUT` | `--graceful-close-timeout` | `5s` |
+| `TINY_HTTPD_DRAIN_TIMEOUT` | `--drain-timeout` | `10s` |
 
 ## Path resolution
 

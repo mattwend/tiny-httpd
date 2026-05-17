@@ -99,6 +99,9 @@ export, structured tracing, Tokio runtime metrics).
 
 The process sets the OpenTelemetry `service.name` resource attribute from
 `TINY_HTTPD_SERVICE_NAME` / `--service-name` (default: `tiny-httpd`).
+Timeout configuration is read from the `TINY_HTTPD_*_TIMEOUT` environment
+variables or matching `--*-timeout` CLI flags and accepts values like `30s`,
+`2m`, and `1h30m`.
 
 ### Request spans
 

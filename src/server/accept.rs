@@ -50,6 +50,25 @@ impl Default for ServerParams {
 
 /// Runs the server with an injectable shutdown future for tests or binaries.
 ///
+/// # Examples
+///
+/// ```rust
+/// use tiny_httpd::{ServerParams, run_with_shutdown};
+/// use tokio::net::TcpListener;
+///
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), std::io::Error> {
+/// let listener = TcpListener::bind("127.0.0.1:0").await?;
+/// let params = ServerParams {
+///     content_root: None,
+///     ..ServerParams::default()
+/// };
+///
+/// run_with_shutdown(listener, params, || async { Ok(()) }).await?;
+/// # Ok(())
+/// # }
+/// ```
+///
 /// # Arguments
 /// * `listener` - Bound TCP listener to accept connections from.
 /// * `params` - Server behavior and timeout configuration.
@@ -248,6 +267,7 @@ async fn serve_connection(
                         }
                     }
                     Err(error) => {
+                        // Defensive only: the accept loop owns the sole sender and broadcasts before dropping it.
                         warn!(%peer_addr, error = %error, "shutdown signal channel closed unexpectedly; starting graceful connection shutdown");
                         connection.as_mut().graceful_shutdown();
                         shutting_down = true;
