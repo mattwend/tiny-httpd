@@ -22,13 +22,14 @@ Licensed under the GNU General Public License, version 3 or later. See [`LICENSE
 
 ## Prerequisites
 
-- Rust + Cargo
+- Rust + Cargo (toolchain `1.95.0`; see `rust-toolchain.toml`)
 - Podman for local container builds
 - Docker Buildx for GitHub Actions container validation and publishing
 - `musl-tools` and the Rust target `x86_64-unknown-linux-musl` for the reference container build
 
-The reference container build targets `x86_64-unknown-linux-musl` and
-produces a static binary for a `scratch` image.
+The repository pins Rust `1.95.0` for reproducible local and container
+builds. The reference container build targets `x86_64-unknown-linux-musl`
+and produces a static binary for a `scratch` image.
 
 ## Quick start
 

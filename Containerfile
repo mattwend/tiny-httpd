@@ -2,7 +2,7 @@
 # Build from the repository root:
 # podman build -f Containerfile .
 
-FROM rust:1-slim AS build
+FROM rust:1.95.0-slim AS build
 RUN apt-get update \
     && apt-get install -y --no-install-recommends musl-tools \
     && rm -rf /var/lib/apt/lists/* \

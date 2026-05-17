@@ -2,6 +2,7 @@
 name = "tiny-httpd"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.95"
 description = "Minimal static-file HTTP server for containers and Kubernetes"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/mattwend/tiny-httpd"
