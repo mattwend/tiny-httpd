@@ -11,7 +11,7 @@ use tokio::{
     task::JoinSet,
     time::{Instant, Sleep, timeout},
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     handler::{AppState, handle_with_peer_addr},
@@ -176,7 +176,9 @@ where
         }
     }
 
-    let _ = shutdown_tx.send(true);
+    if let Err(error) = shutdown_tx.send(true) {
+        debug!(error = %error, "shutdown broadcast had no active receivers");
+    }
 
     match timeout(drain_timeout, drain_connections(&mut connections)).await {
         Ok(()) => info!("all connections drained gracefully"),
