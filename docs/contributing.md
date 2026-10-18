@@ -19,6 +19,14 @@ cargo build --release
 Run `cargo fmt` and `cargo clippy` before every commit. CI enforces
 formatting, clippy, tests, coverage generation, and container validation.
 
+## Dependency updates
+
+`telemetry-setup` comes from `mattwend/telemetry-setup` on GitHub, not the
+unrelated crates.io package with the same name. Keep it pinned to an immutable
+Git revision and update its OpenTelemetry dependencies together with this
+crate's `opentelemetry` requirement so HTTP metrics use the same global meter
+provider as the telemetry exporter.
+
 ## Commit conventions
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):

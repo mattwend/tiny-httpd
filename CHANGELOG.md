@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Updated direct crate requirements and refreshed transitive dependencies to their latest compatible versions.
+- Upgraded OpenTelemetry to 0.33.1 and pinned `mattwend/telemetry-setup` to revision `5f7af904c0105de345c493797eddbae48a2f61c6` for matching OpenTelemetry support.
+- Retained Rust 1.95.0; the updated dependencies remain compatible with the pinned toolchain.
+
 ## [0.1.0] - 2026-05-17
 
 ### Added
