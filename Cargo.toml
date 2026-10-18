@@ -11,22 +11,22 @@ keywords = ["http", "static", "server", "kubernetes"]
 categories = ["web-programming::http-server", "command-line-utilities"]
 
 [dependencies]
-bytes = "1.8.0"
-clap = { version = "4.5.39", features = ["derive", "env"] }
-futures-util = "0.3.31"
-humantime = "2.3"
-http-body-util = "0.1.2"
-hyper = { version = "1.6.0", features = ["http1", "server"] }
-hyper-util = { version = "0.1.10", features = ["server", "server-auto", "server-graceful", "http1", "tokio", "service"] }
+bytes = "1.12.1"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+futures-util = "0.3.34"
+humantime = "2.4.0"
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", features = ["http1", "server"] }
+hyper-util = { version = "0.1.21", features = ["server", "server-auto", "server-graceful", "http1", "tokio", "service"] }
 mime_guess = "2.0.5"
-opentelemetry = "0.31.0"
-telemetry-setup = { git = "https://github.com/mattwend/telemetry-setup", tag = "v0.1.0", features = ["otlp", "tokio-metrics"] }
-thiserror = "2.0.12"
-tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "signal", "net", "fs", "io-util", "time"] }
-tokio-util = { version = "0.7.15", features = ["io"] }
-tracing = "0.1.41"
+opentelemetry = "0.33.1"
+telemetry-setup = { git = "https://github.com/mattwend/telemetry-setup", rev = "5f7af904c0105de345c493797eddbae48a2f61c6", features = ["otlp", "tokio-metrics"] }
+thiserror = "2.0.21"
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "signal", "net", "fs", "io-util", "time"] }
+tokio-util = { version = "0.7.20", features = ["io"] }
+tracing = "0.1.44"
 
 [dev-dependencies]
-hyper-util = { version = "0.1.10", features = ["client", "client-legacy", "http1", "tokio"] }
-tempfile = "3.14.0"
+hyper-util = { version = "0.1.21", features = ["client", "client-legacy", "http1", "tokio"] }
+tempfile = "3.27.0"
 tracing-subscriber = { version = "0.3.23", features = ["fmt", "registry"] }
